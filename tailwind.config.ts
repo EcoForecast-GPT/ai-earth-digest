@@ -80,10 +80,44 @@ export default {
             height: "0",
           },
         },
+        // WeatherGPT Custom Animations
+        "pulse-glow": {
+          "0%, 100%": {
+            boxShadow: "0 0 20px hsl(var(--glow-primary) / 0.3)",
+          },
+          "50%": {
+            boxShadow: "0 0 30px hsl(var(--glow-primary) / 0.6)",
+          },
+        },
+        "float": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+        "data-flow": {
+          "0%": { left: "-100%" },
+          "100%": { left: "100%" },
+        },
+        "aurora": {
+          "0%, 100%": {
+            background: "linear-gradient(135deg, hsl(180 100% 50% / 0.2), hsl(260 80% 60% / 0.2))",
+          },
+          "50%": {
+            background: "linear-gradient(135deg, hsl(260 80% 60% / 0.2), hsl(150 100% 45% / 0.2))",
+          },
+        },
+        "scan": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        "float": "float 6s ease-in-out infinite",
+        "data-flow": "data-flow 3s linear infinite",
+        "aurora": "aurora 8s ease-in-out infinite",
+        "scan": "scan 2s linear infinite",
       },
     },
   },
