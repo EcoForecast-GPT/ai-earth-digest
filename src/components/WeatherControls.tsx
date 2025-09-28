@@ -1,36 +1,23 @@
-import { useState } from "react";
-import { WeatherLocation } from "@/pages/Index";
-import { Card } from "@/components/ui/card";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { WeatherLocation } from "@/pages/Index";
+import { MapPin, Calendar, Database, Loader2, Navigation, Globe } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import { useLocation } from "@/hooks/useLocation";
+import DataExport from "./DataExport";
 
 interface WeatherControlsProps {
   location: WeatherLocation;
   onLocationChange: (location: WeatherLocation) => void;
   dateRange: { start: string; end: string };
   onDateRangeChange: (range: { start: string; end: string }) => void;
-  selectedVars: string[];
-  onVarsChange: (vars: string[]) => void;
   isLoading: boolean;
   onFetch: () => void;
+  weatherData: any[];
 }
-
-interface WeatherVariable {
-  id: string;
-  label: string;
-  description: string;
-}
-
-const weatherVariables: WeatherVariable[] = [
-  { id: "temperature", label: "Temperature", description: "Air temperature (°C)" },
-  { id: "precipitation", label: "Precipitation", description: "Rainfall amount (mm)" },
-  { id: "humidity", label: "Humidity", description: "Relative humidity (%)" },
-  { id: "windSpeed", label: "Wind Speed", description: "Wind velocity (m/s)" },
-  { id: "pressure", label: "Pressure", description: "Atmospheric pressure (hPa)" },
-  { id: "cloudCover", label: "Cloud Cover", description: "Cloud coverage (%)" }
-];
 
 const presetLocations: WeatherLocation[] = [
   { lat: 40.7128, lon: -74.0060, name: "New York City" },
@@ -45,170 +32,222 @@ const WeatherControls = ({
   onLocationChange,
   dateRange,
   onDateRangeChange,
-  selectedVars,
-  onVarsChange,
   isLoading,
-  onFetch
+  onFetch,
+  weatherData
 }: WeatherControlsProps) => {
   const [customLocation, setCustomLocation] = useState("");
+  const { 
+    location: detectedLocation, 
+    loading: locationLoading, 
+    error: locationError, 
+    requestLocation 
+  } = useLocation();
 
-  const handleVariableChange = (variableId: string, checked: boolean) => {
-    if (checked) {
-      onVarsChange([...selectedVars, variableId]);
-    } else {
-      onVarsChange(selectedVars.filter(v => v !== variableId));
+  useEffect(() => {
+    if (detectedLocation) {
+      onLocationChange(detectedLocation);
     }
-  };
+  }, [detectedLocation, onLocationChange]);
 
   const handleCustomLocationSubmit = () => {
-    if (customLocation.trim()) {
-      // Simple parsing for lat,lon format
-      const coords = customLocation.split(',').map(s => parseFloat(s.trim()));
-      if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+    const parts = customLocation.split(',').map(part => part.trim());
+    
+    if (parts.length === 2) {
+      const lat = parseFloat(parts[0]);
+      const lon = parseFloat(parts[1]);
+      
+      if (!isNaN(lat) && !isNaN(lon)) {
         onLocationChange({
-          lat: coords[0],
-          lon: coords[1],
-          name: `Custom (${coords[0]}, ${coords[1]})`
+          lat,
+          lon,
+          name: `${lat.toFixed(4)}, ${lon.toFixed(4)}`
         });
-        setCustomLocation("");
+      } else {
+        onLocationChange({
+          lat: 40.7128,
+          lon: -74.0060,
+          name: customLocation
+        });
       }
     }
+    setCustomLocation("");
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h3 className="text-xl font-semibold text-foreground flex items-center gap-2">
-        <div className="w-2 h-2 bg-primary rounded-full animate-pulse-glow" />
-        Weather Controls
-      </h3>
+    <motion.div 
+      className="p-6 space-y-6"
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <motion.div 
+        className="flex items-center gap-2 mb-4"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <motion.div 
+          className="w-2 h-2 bg-primary rounded-full"
+          animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+        <h2 className="text-xl font-semibold text-foreground">Weather Controls</h2>
+      </motion.div>
 
-      {/* Location Selection */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium text-foreground">Location</Label>
+      <motion.div 
+        className="space-y-4"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <Label className="text-foreground flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-primary" />
+          Location
+        </Label>
         
-        {/* Preset Locations */}
-        <div className="space-y-2">
-          {presetLocations.map((preset) => (
-            <Button
+        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+          <Button
+            onClick={requestLocation}
+            disabled={locationLoading}
+            variant="outline"
+            className="w-full glass-panel hover:glow-primary transition-all duration-300 group"
+          >
+            {locationLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Detecting Location...
+              </>
+            ) : (
+              <>
+                <Navigation className="w-4 h-4 mr-2" />
+                Auto-Detect Location
+              </>
+            )}
+          </Button>
+        </motion.div>
+
+        {locationError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="text-sm text-destructive bg-destructive/10 p-2 rounded-lg"
+          >
+            {locationError.message}
+          </motion.div>
+        )}
+
+        <div className="grid grid-cols-1 gap-2">
+          {presetLocations.map((preset, index) => (
+            <motion.div
               key={preset.name}
-              variant={location.name === preset.name ? "glow" : "glass"}
-              size="sm"
-              onClick={() => onLocationChange(preset)}
-              className="w-full justify-start text-xs"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 + index * 0.1 }}
+              whileHover={{ scale: 1.02 }}
             >
-              {preset.name}
-            </Button>
+              <Button
+                variant={location.name === preset.name ? "default" : "outline"}
+                className={`w-full justify-start text-left glass-panel transition-all duration-300 ${
+                  location.name === preset.name ? "glow-primary" : "hover:glow-accent"
+                }`}
+                onClick={() => onLocationChange(preset)}
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                {preset.name}
+              </Button>
+            </motion.div>
           ))}
         </div>
 
-        {/* Custom Location */}
-        <div className="flex gap-2">
+        <motion.div className="flex space-x-2">
           <Input
-            placeholder="Lat, Lon (e.g. 40.7, -74.0)"
             value={customLocation}
             onChange={(e) => setCustomLocation(e.target.value)}
-            className="glass-panel"
-            onKeyPress={(e) => e.key === 'Enter' && handleCustomLocationSubmit()}
+            placeholder="Enter City, State or lat, lon"
+            className="glass-panel border-white/10 focus:border-primary/50"
+            onKeyDown={(e) => e.key === 'Enter' && handleCustomLocationSubmit()}
           />
           <Button 
-            size="sm" 
             onClick={handleCustomLocationSubmit}
-            variant="glass"
+            variant="outline"
+            className="glass-panel hover:glow-primary transition-all duration-300"
           >
-            Set
+            <Globe className="w-4 h-4" />
           </Button>
-        </div>
+        </motion.div>
+      </motion.div>
 
-        {/* Current Location Display */}
-        <Card className="glass-panel p-3">
-          <p className="text-xs font-medium text-foreground">{location.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {location.lat.toFixed(4)}°, {location.lon.toFixed(4)}°
-          </p>
-        </Card>
-      </div>
-
-      {/* Date Range */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium text-foreground">Date Range</Label>
-        <div className="space-y-2">
+      <motion.div className="space-y-4">
+        <Label className="text-foreground flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-accent" />
+          Date Range
+        </Label>
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label className="text-xs text-muted-foreground">Start Date</Label>
+            <Label htmlFor="start-date" className="text-sm text-muted-foreground">Start Date</Label>
             <Input
+              id="start-date"
               type="date"
               value={dateRange.start}
               onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
-              className="glass-panel"
+              className="glass-panel border-white/10 focus:border-accent/50"
             />
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">End Date</Label>
+            <Label htmlFor="end-date" className="text-sm text-muted-foreground">End Date</Label>
             <Input
+              id="end-date"
               type="date"
               value={dateRange.end}
               onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
-              className="glass-panel"
+              className="glass-panel border-white/10 focus:border-accent/50"
             />
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Variable Selection */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium text-foreground">Variables</Label>
-        <div className="space-y-3">
-          {weatherVariables.map((variable) => (
-            <div key={variable.id} className="flex items-start space-x-3 glass-panel p-3 rounded-lg">
-              <Checkbox
-                id={variable.id}
-                checked={selectedVars.includes(variable.id)}
-                onCheckedChange={(checked) => handleVariableChange(variable.id, !!checked)}
-                className="mt-0.5"
-              />
-              <div className="flex-1">
-                <Label
-                  htmlFor={variable.id}
-                  className="text-sm font-medium text-foreground cursor-pointer"
-                >
-                  {variable.label}
-                </Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {variable.description}
-                </p>
-              </div>
-            </div>
-          ))}
+      <motion.div className="glass-panel p-4 rounded-lg">
+        <Label className="text-foreground flex items-center gap-2 mb-3">
+          <Database className="w-4 h-4 text-glow-secondary" />
+          Auto-Fetched Variables
+        </Label>
+        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+          <div>• Temperature (°C)</div>
+          <div>• Wind Speed (m/s)</div>
+          <div>• Precipitation (mm)</div>
+          <div>• UV Index</div>
+          <div>• Humidity (%)</div>
+          <div>• Visibility (km)</div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Fetch Button */}
       <Button
         onClick={onFetch}
-        disabled={isLoading || selectedVars.length === 0}
-        variant="glow"
-        className="w-full"
+        disabled={isLoading}
+        className="w-full glass-card glow-primary hover:glow-accent transition-all duration-300"
       >
         {isLoading ? (
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             Fetching NASA Data...
-          </div>
+          </>
         ) : (
-          "Fetch Weather Data"
+          <>
+            <Database className="w-4 h-4 mr-2" />
+            Analyze Weather Data
+          </>
         )}
       </Button>
 
-      {/* Data Source Info */}
-      <Card className="glass-panel p-3">
-        <p className="text-xs font-medium text-foreground mb-2">Data Sources</p>
-        <ul className="text-xs text-muted-foreground space-y-1">
-          <li>• NASA GES DISC</li>
-          <li>• Giovanni</li>
-          <li>• Worldview</li>
-          <li>• Earthdata Search</li>
-        </ul>
-      </Card>
-    </div>
+      {weatherData.length > 0 && (
+        <DataExport 
+          weatherData={weatherData}
+          location={location}
+          dateRange={dateRange}
+        />
+      )}
+    </motion.div>
   );
 };
 
