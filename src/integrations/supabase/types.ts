@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      nasa_weather: {
+        Row: {
+          fetched_at: string | null
+          id: number
+          lat: number | null
+          lon: number | null
+          obs_date: string | null
+          source: string | null
+          units: string | null
+          value: number | null
+          variable: string | null
+        }
+        Insert: {
+          fetched_at?: string | null
+          id?: number
+          lat?: number | null
+          lon?: number | null
+          obs_date?: string | null
+          source?: string | null
+          units?: string | null
+          value?: number | null
+          variable?: string | null
+        }
+        Update: {
+          fetched_at?: string | null
+          id?: number
+          lat?: number | null
+          lon?: number | null
+          obs_date?: string | null
+          source?: string | null
+          units?: string | null
+          value?: number | null
+          variable?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
