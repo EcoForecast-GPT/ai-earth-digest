@@ -1,13 +1,22 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { MapPin, Download, BarChart3, Cloud, Wind, Thermometer, Droplets, Bot } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import WeatherMap from "@/components/WeatherMap";
-import TimeSeriesChart from "@/components/TimeSeriesChart";
-import AISummaryCard from "@/components/AISummaryCard";
 import WeatherControls from "@/components/WeatherControls";
 import WeatherBackground from "@/components/WeatherBackground";
 import WeatherLikelihood from "@/components/WeatherLikelihood";
+import DataExport from "@/components/DataExport";
+import TimeSeriesChart from "@/components/TimeSeriesChart";
+import AISummaryCard from "@/components/AISummaryCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Card } from "@/components/ui/card";
+import { WeatherChatbot } from "@/components/WeatherChatbot";
+import { InteractiveWeatherMap } from "@/components/InteractiveWeatherMap";
+import { ResponsiveLayout } from "@/components/ResponsiveLayout";
+import { useLocationIP } from "@/hooks/useLocationIP";
 
 export interface WeatherLocation {
   lat: number;
@@ -15,216 +24,320 @@ export interface WeatherLocation {
   name: string;
 }
 
+export type WeatherCondition = "sunny" | "cloudy" | "rainy" | "stormy" | "snowy" | "windy";
+
 export interface WeatherData {
   timestamp: string;
   temperature: number;
   precipitation: number;
   humidity: number;
   windSpeed: number;
+  pressure: number;
+  visibility: number;
+  uvIndex: number;
+  timeSeries: Array<{
+    time: string;
+    temperature: number;
+    precipitation: number;
+    windSpeed: number;
+    humidity: number;
+  }>;
 }
 
 const Index = () => {
+  const { toast } = useToast();
+  const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
     lat: 40.7128,
     lon: -74.0060,
-    name: "New York City"
+    name: "New York, NY"
   });
-  
-  const [dateRange, setDateRange] = useState({
-    start: "2024-01-01",
-    end: "2024-01-31"
-  });
-  
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
+  const [showChatbot, setShowChatbot] = useState(false);
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mock weather data for demonstration
-  const mockWeatherData: WeatherData[] = Array.from({ length: 30 }, (_, i) => ({
-    timestamp: new Date(2024, 0, i + 1).toISOString(),
-    temperature: 20 + Math.sin(i / 5) * 10 + Math.random() * 5,
-    precipitation: Math.random() * 50,
-    humidity: 60 + Math.random() * 30,
-    windSpeed: 5 + Math.random() * 15
-  }));
+  // Mock weather data generator with auto-fetched variables
+  const generateWeatherData = useCallback((location: WeatherLocation, date: Date): WeatherData => {
+    const baseTemp = 20 + Math.sin(date.getMonth()) * 15;
+    const timeSeries = Array.from({ length: 24 }, (_, hour) => ({
+      time: `${hour.toString().padStart(2, '0')}:00`,
+      temperature: baseTemp + Math.sin(hour / 4) * 8 + Math.random() * 4,
+      precipitation: Math.random() * 20,
+      windSpeed: 5 + Math.random() * 15,
+      humidity: 40 + Math.random() * 40,
+    }));
+
+    return {
+      timestamp: date.toISOString(),
+      temperature: baseTemp + Math.random() * 10,
+      precipitation: Math.random() * 50,
+      humidity: 60 + Math.random() * 30,
+      windSpeed: 8 + Math.random() * 12,
+      pressure: 1013 + Math.random() * 20 - 10,
+      visibility: 8 + Math.random() * 7,
+      uvIndex: Math.max(0, Math.min(11, 6 + Math.sin(date.getHours() / 24 * Math.PI * 2) * 5)),
+      timeSeries
+    };
+  }, []);
+
+  // Auto-fetch weather data
+  const fetchWeatherData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      const data = generateWeatherData(selectedLocation, selectedDate);
+      setWeatherData(data);
+      
+      // Determine weather condition based on data
+      if (data.precipitation > 30) {
+        setWeatherCondition("rainy");
+      } else if (data.windSpeed > 15) {
+        setWeatherCondition("windy");
+      } else if (data.temperature > 30) {
+        setWeatherCondition("sunny");
+      } else if (data.temperature < 10) {
+        setWeatherCondition("snowy");
+      } else {
+        setWeatherCondition("cloudy");
+      }
+      
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch weather data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedLocation, selectedDate, generateWeatherData, toast]);
+
+  // Auto-fetch weather data when location or date changes
+  useEffect(() => {
+    fetchWeatherData();
+  }, [selectedLocation, selectedDate, fetchWeatherData]);
+
+  // Update location when auto-location is available
+  useEffect(() => {
+    if (autoLocation && !locationLoading) {
+      setSelectedLocation({
+        lat: autoLocation.lat,
+        lon: autoLocation.lon,
+        name: autoLocation.name
+      });
+      
+      if (autoLocation.source === 'gps') {
+        toast({
+          title: "Location detected",
+          description: `Using GPS location: ${autoLocation.name}`,
+        });
+      } else if (autoLocation.source === 'ip') {
+        toast({
+          title: "Location detected",
+          description: `Using IP location: ${autoLocation.name}`,
+        });
+      }
+    }
+  }, [autoLocation, locationLoading, toast]);
+
+  const handleLocationSelect = useCallback((location: WeatherLocation) => {
+    setSelectedLocation(location);
+    updateLocation(location);
+    toast({
+      title: "Location updated",
+      description: `Now showing weather for ${location.name}`,
+    });
+  }, [toast, updateLocation]);
+
+  // Create widgets for responsive layout
+  const widgets = [
+    {
+      id: 'ai-summary',
+      title: 'AI Weather Analysis',
+      component: (
+        <AISummaryCard 
+          location={selectedLocation}
+          weatherData={weatherData ? [weatherData] : []}
+          isLoading={isLoading}
+        />
+      ),
+      priority: 10,
+      minHeight: 200,
+    },
+    {
+      id: 'weather-likelihood',
+      title: 'Weather Likelihood',
+      component: (
+        <WeatherLikelihood 
+          location={selectedLocation}
+          weatherData={weatherData ? [weatherData] : []}
+          isLoading={isLoading}
+        />
+      ),
+      priority: 9,
+      minHeight: 300,
+    },
+    {
+      id: 'weather-chart',
+      title: 'Weather Trends',
+      component: <TimeSeriesChart data={weatherData ? [weatherData] : []} selectedVars={["temperature", "precipitation"]} isLoading={isLoading} />,
+      priority: 8,
+      minHeight: 400,
+    },
+    {
+      id: 'weather-map',
+      title: 'Interactive Map',
+      component: (
+        <InteractiveWeatherMap 
+          location={selectedLocation}
+          onLocationSelect={handleLocationSelect}
+        />
+      ),
+      priority: 7,
+      minHeight: 400,
+    },
+    {
+      id: 'data-export',
+      title: 'Data Export',
+      component: (
+        <DataExport 
+          weatherData={weatherData ? [weatherData] : []}
+          location={selectedLocation}
+          date={selectedDate}
+        />
+      ),
+      priority: 6,
+      minHeight: 200,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-card p-4 relative overflow-hidden">
-      {/* Weather-based Background Animation */}
-      <WeatherBackground weatherData={mockWeatherData} />
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10 relative overflow-hidden">
+      <WeatherBackground weatherData={weatherData ? [weatherData] : []} />
       
       {/* Header */}
       <motion.header 
-        className="mb-8 relative z-10"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
+        className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
       >
-        <div className="max-w-7xl mx-auto flex justify-between items-start">
+        <motion.div 
+          className="flex items-center gap-3"
+          whileHover={{ scale: 1.05 }}
+        >
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2, duration: 0.8 }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            className="p-2 rounded-lg bg-primary/20 border border-primary/30 glow-primary"
           >
-            <motion.h1 
-              className="text-4xl md:text-6xl font-bold text-aurora mb-2"
-              animate={{ 
-                textShadow: [
-                  '0 0 10px hsl(var(--aurora))',
-                  '0 0 20px hsl(var(--aurora))',
-                  '0 0 10px hsl(var(--aurora))'
-                ]
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              WeatherGPT
-            </motion.h1>
-            <motion.p 
-              className="text-muted-foreground text-lg md:text-xl"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              AI-powered weather intelligence with NASA satellite data
-            </motion.p>
+            <Cloud className="w-6 h-6 text-primary" />
+          </motion.div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-aurora">WeatherGPT</h1>
+            <p className="text-xs md:text-sm text-muted-foreground">AI-Powered Weather Intelligence</p>
+          </div>
+        </motion.div>
+        
+        <div className="flex items-center gap-2 md:gap-3">
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Badge variant="outline" className="glass-card border-primary/30 text-primary text-xs md:text-sm">
+              <MapPin className="w-3 h-3 mr-1" />
+              <span className="hidden sm:inline">{selectedLocation.name}</span>
+              <span className="sm:hidden">{selectedLocation.name.split(',')[0]}</span>
+            </Badge>
           </motion.div>
           
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <ThemeToggle />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowChatbot(!showChatbot)}
+              className="glass-card border-primary/30 hover:bg-primary/20"
+            >
+              <Bot className="w-4 h-4 text-primary" />
+            </Button>
           </motion.div>
+          
+          <ThemeToggle />
         </div>
       </motion.header>
 
-      {/* Main Dashboard */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
-        {/* Controls Panel */}
-        <motion.div
-          className="lg:col-span-3"
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4, duration: 0.6 }}
-        >
-          <Card className="glass-card glow-primary hover:glow-accent transition-all duration-500 hover:scale-[1.02]">
+      {/* Main Content */}
+      <main className="relative z-10 p-4 md:p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Controls */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-6 md:mb-8"
+          >
             <WeatherControls
               location={selectedLocation}
-              onLocationChange={setSelectedLocation}
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
+              onLocationChange={handleLocationSelect}
+              dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
+              onDateRangeChange={(range) => setSelectedDate(new Date(range.start))}
               isLoading={isLoading}
-              onFetch={() => setIsLoading(!isLoading)}
-              weatherData={mockWeatherData}
+              onFetch={fetchWeatherData}
+              weatherData={weatherData ? [weatherData] : []}
             />
-          </Card>
-        </motion.div>
+          </motion.div>
 
-        {/* Interactive Map */}
-        <motion.div
-          className="lg:col-span-5"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.6 }}
-        >
-          <Card className="glass-card hover:glow-primary transition-all duration-500 hover:scale-[1.01]">
-            <WeatherMap
-              location={selectedLocation}
-              onLocationSelect={setSelectedLocation}
-            />
-          </Card>
-        </motion.div>
-
-        {/* Weather Likelihood Panel */}
-        <motion.div
-          className="lg:col-span-4"
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.8, duration: 0.6 }}
-        >
-          <Card className="glass-card glow-accent hover:glow-secondary transition-all duration-500 hover:scale-[1.02] h-full">
-            <div className="p-6">
-              <WeatherLikelihood
-                location={selectedLocation}
-                weatherData={mockWeatherData}
-                isLoading={isLoading}
-              />
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* AI Summary - Moved to second row */}
-        <motion.div
-          className="lg:col-span-6"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.0, duration: 0.6 }}
-        >
-          <Card className="glass-card glow-secondary hover:glow-accent transition-all duration-500 hover:scale-[1.01]">
-            <AISummaryCard
-              location={selectedLocation}
-              weatherData={mockWeatherData}
-              isLoading={isLoading}
-            />
-          </Card>
-        </motion.div>
-
-        {/* Time Series Charts */}
-        <motion.div
-          className="lg:col-span-6"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.2, duration: 0.6 }}
-        >
-          <Card className="glass-card chart-glow hover:glow-primary transition-all duration-500 hover:scale-[1.01]">
-            <TimeSeriesChart
-              data={mockWeatherData}
-              selectedVars={["temperature", "precipitation", "humidity", "windSpeed"]}
-              isLoading={isLoading}
-            />
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Floating Data Stream Effect */}
-      <motion.div 
-        className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"
-        animate={{
-          backgroundPosition: ['0% 0%', '100% 0%'],
-        }}
-        transition={{
-          duration: 3,
-          repeat: Infinity,
-          ease: 'linear',
-        }}
-        style={{
-          backgroundSize: '200% 100%',
-        }}
-      />
-
-      {/* Floating particles effect */}
-      <div className="fixed inset-0 pointer-events-none">
-        {Array.from({ length: 20 }).map((_, i) => (
+          {/* Responsive Widget Layout */}
           <motion.div
-            key={i}
-            className="absolute w-1 h-1 bg-aurora/30 rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-            }}
-            animate={{
-              y: [0, -20, 0],
-              opacity: [0, 1, 0],
-              scale: [0, 1, 0],
-            }}
-            transition={{
-              duration: Math.random() * 3 + 2,
-              repeat: Infinity,
-              delay: Math.random() * 2,
-              ease: 'easeInOut',
-            }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <ResponsiveLayout widgets={widgets} />
+          </motion.div>
+        </div>
+      </main>
+
+      {/* Weather Chatbot */}
+      <AnimatePresence>
+        {showChatbot && (
+          <WeatherChatbot 
+            weatherData={weatherData}
+            location={selectedLocation.name}
           />
-        ))}
-      </div>
+        )}
+      </AnimatePresence>
+
+      {/* Loading overlay */}
+      <AnimatePresence>
+        {(isLoading || locationLoading) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div className="text-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="text-primary mb-4"
+              >
+                <Cloud className="w-12 h-12 mx-auto" />
+              </motion.div>
+              <p className="text-sm text-muted-foreground">
+                {locationLoading ? 'Getting your location...' : 'Loading weather data...'}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
