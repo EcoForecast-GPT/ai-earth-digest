@@ -28,7 +28,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "Deploying Supabase functions..."
-          supabase functions deploy
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
       # Optional: Confirm deployment
       - name: List Deployed Functions
