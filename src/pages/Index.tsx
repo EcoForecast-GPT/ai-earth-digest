@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import WeatherMap from "@/components/WeatherMap";
 import WeatherControls from "@/components/WeatherControls";
-import WeatherBackground from "@/components/WeatherBackground";
 import WeatherLikelihood from "@/components/WeatherLikelihood";
 import DataExport from "@/components/DataExport";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
@@ -224,7 +223,6 @@ const Index = () => {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <AnimatedBackground />
-      <WeatherBackground weatherData={weatherData ? [weatherData] : []} />
       
       {/* Header */}
       <motion.header 
@@ -242,7 +240,7 @@ const Index = () => {
             className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
           />
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-primary">ClimaCast</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
             <p className="text-xs md:text-sm text-muted-foreground">Smart Weather Forecasting</p>
           </div>
         </motion.div>
