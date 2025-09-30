@@ -158,10 +158,22 @@ export const useLocationIP = () => {
     initializeLocation();
   };
 
-  // Initialize on mount
+  // Initialize on mount - only once
   useEffect(() => {
-    initializeLocation();
-  }, []);
+    let mounted = true;
+    
+    const init = async () => {
+      if (mounted) {
+        await initializeLocation();
+      }
+    };
+    
+    init();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array ensures this only runs once
 
   return {
     location,

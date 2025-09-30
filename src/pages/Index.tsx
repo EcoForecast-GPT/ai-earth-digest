@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Download, BarChart3, Cloud, Wind, Thermometer, Droplets, Bot } from "lucide-react";
+import { MapPin, Bot } from "lucide-react";
+import logo from "@/assets/logo.jpg";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,8 @@ import { WeatherChatbot } from "@/components/WeatherChatbot";
 import { InteractiveWeatherMap } from "@/components/InteractiveWeatherMap";
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { useLocationIP } from "@/hooks/useLocationIP";
+import { PlanetLoader } from "@/components/PlanetLoader";
+import { AnimatedBackground } from "@/components/AnimatedBackground";
 
 export interface WeatherLocation {
   lat: number;
@@ -121,37 +124,40 @@ const Index = () => {
     fetchWeatherData();
   }, [selectedLocation, selectedDate, fetchWeatherData]);
 
-  // Update location when auto-location is available
+  // Update location when auto-location is available - only once per location change
   useEffect(() => {
     if (autoLocation && !locationLoading) {
-      setSelectedLocation({
-        lat: autoLocation.lat,
-        lon: autoLocation.lon,
-        name: autoLocation.name
-      });
-      
-      if (autoLocation.source === 'gps') {
-        toast({
-          title: "Location detected",
-          description: `Using GPS location: ${autoLocation.name}`,
+      // Only update if the location actually changed
+      if (selectedLocation.lat !== autoLocation.lat || selectedLocation.lon !== autoLocation.lon) {
+        setSelectedLocation({
+          lat: autoLocation.lat,
+          lon: autoLocation.lon,
+          name: autoLocation.name
         });
-      } else if (autoLocation.source === 'ip') {
-        toast({
-          title: "Location detected",
-          description: `Using IP location: ${autoLocation.name}`,
-        });
+        
+        if (autoLocation.source === 'gps') {
+          toast({
+            title: "Location detected",
+            description: `Using GPS location: ${autoLocation.name}`,
+          });
+        } else if (autoLocation.source === 'ip') {
+          toast({
+            title: "Location detected",
+            description: `Using IP location: ${autoLocation.name}`,
+          });
+        }
       }
     }
-  }, [autoLocation, locationLoading, toast]);
+  }, [autoLocation?.lat, autoLocation?.lon, locationLoading]); // Only depend on lat/lon changes
 
   const handleLocationSelect = useCallback((location: WeatherLocation) => {
     setSelectedLocation(location);
-    updateLocation(location);
+    // Don't call updateLocation to avoid loops
     toast({
       title: "Location updated",
       description: `Now showing weather for ${location.name}`,
     });
-  }, [toast, updateLocation]);
+  }, [toast]);
 
   // Create widgets for responsive layout
   const widgets = [
@@ -216,7 +222,8 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10 relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      <AnimatedBackground />
       <WeatherBackground weatherData={weatherData ? [weatherData] : []} />
       
       {/* Header */}
@@ -227,18 +234,16 @@ const Index = () => {
       >
         <motion.div 
           className="flex items-center gap-3"
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.02 }}
         >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-            className="p-2 rounded-lg bg-primary/20 border border-primary/30 glow-primary"
-          >
-            <Cloud className="w-6 h-6 text-primary" />
-          </motion.div>
+          <img 
+            src={logo} 
+            alt="ClimaCast Logo" 
+            className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
+          />
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-aurora">WeatherGPT</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">AI-Powered Weather Intelligence</p>
+            <h1 className="text-xl md:text-2xl font-bold text-primary">ClimaCast</h1>
+            <p className="text-xs md:text-sm text-muted-foreground">Smart Weather Forecasting</p>
           </div>
         </motion.div>
         
@@ -321,18 +326,12 @@ const Index = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50"
+            className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
           >
             <motion.div className="text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="text-primary mb-4"
-              >
-                <Cloud className="w-12 h-12 mx-auto" />
-              </motion.div>
-              <p className="text-sm text-muted-foreground">
-                {locationLoading ? 'Getting your location...' : 'Loading weather data...'}
+              <PlanetLoader />
+              <p className="text-sm text-primary mt-4 font-medium">
+                {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
               </p>
             </motion.div>
           </motion.div>

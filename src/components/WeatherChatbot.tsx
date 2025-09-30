@@ -46,27 +46,66 @@ export const WeatherChatbot = ({ weatherData, location }: WeatherChatbotProps) =
   const generateWeatherResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
     
+    // Extract weather data if available
+    const temp = weatherData?.temperature;
+    const precip = weatherData?.precipitation;
+    const wind = weatherData?.windSpeed;
+    const humidity = weatherData?.humidity;
+    
     if (message.includes('temperature') || message.includes('hot') || message.includes('cold')) {
-      return `Based on current conditions${location ? ` in ${location}` : ''}, the temperature is showing typical seasonal patterns. For outdoor activities, I'd recommend checking the hourly forecast and considering layers for temperature variations throughout the day.`;
+      if (temp !== undefined) {
+        const feel = temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp > 15 ? 'comfortable' : temp > 5 ? 'cool' : 'cold';
+        return `Current temperature${location ? ` in ${location}` : ''} is ${temp.toFixed(1)}°C, which feels ${feel}. ${temp > 30 ? 'Stay hydrated and seek shade during peak hours.' : temp < 5 ? 'Dress warmly and watch for frost.' : 'Good conditions for most outdoor activities.'}`;
+      }
+      return `Temperature data is loading. Generally, check the hourly forecast for temperature variations throughout the day.`;
     }
     
     if (message.includes('rain') || message.includes('precipitation') || message.includes('wet')) {
-      return `Precipitation patterns${location ? ` for ${location}` : ''} can vary significantly. I'd recommend checking the radar data and hourly forecasts. For outdoor activities, having backup plans is always wise when there's precipitation in the forecast.`;
+      if (precip !== undefined) {
+        const rainLevel = precip > 10 ? 'heavy' : precip > 5 ? 'moderate' : precip > 1 ? 'light' : 'minimal';
+        return `Precipitation${location ? ` in ${location}` : ''} is ${precip.toFixed(1)}mm/h (${rainLevel}). ${precip > 10 ? 'Heavy rain expected - indoor activities recommended.' : precip > 5 ? 'Bring an umbrella and waterproof gear.' : 'Mostly dry conditions.'}`;
+      }
+      return `Precipitation data is loading. Check the radar and hourly forecasts for accurate timing.`;
     }
     
     if (message.includes('wind') || message.includes('windy')) {
-      return `Wind conditions are important for many outdoor activities. Strong winds can affect everything from hiking to water sports. I'd suggest checking both current wind speeds and gusts, as well as the hourly forecast for wind direction changes.`;
+      if (wind !== undefined) {
+        const windLevel = wind > 20 ? 'very windy' : wind > 15 ? 'windy' : wind > 10 ? 'breezy' : 'calm';
+        return `Wind speed${location ? ` in ${location}` : ''} is ${wind.toFixed(1)} km/h (${windLevel}). ${wind > 20 ? 'Strong winds may affect outdoor activities.' : wind > 15 ? 'Noticeable wind - secure loose objects.' : 'Pleasant wind conditions.'}`;
+      }
+      return `Wind data is loading. Check both speed and gusts for outdoor planning.`;
+    }
+    
+    if (message.includes('humidity') || message.includes('humid') || message.includes('uncomfortable')) {
+      if (humidity !== undefined) {
+        const humidLevel = humidity > 80 ? 'very humid' : humidity > 60 ? 'humid' : humidity > 40 ? 'comfortable' : 'dry';
+        return `Humidity${location ? ` in ${location}` : ''} is ${humidity.toFixed(0)}% (${humidLevel}). ${humidity > 80 ? 'Very uncomfortable - stay cool and hydrated.' : humidity > 60 ? 'Moderately humid conditions.' : 'Comfortable humidity levels.'}`;
+      }
+      return `Humidity data is loading. High humidity can make temperatures feel warmer.`;
     }
     
     if (message.includes('forecast') || message.includes('tomorrow') || message.includes('week')) {
-      return `The extended forecast shows evolving weather patterns. I recommend checking multiple timeframes - hourly for detailed short-term planning and daily for general weekly trends. Weather can change quickly, so regular updates are helpful.`;
+      return `The forecast shows evolving patterns${location ? ` for ${location}` : ''}. Check the time-series chart for hourly trends. Weather can change quickly, so check back regularly for updates.`;
     }
     
     if (message.includes('outdoor') || message.includes('activity') || message.includes('hiking') || message.includes('sports')) {
-      return `For outdoor activities, consider multiple weather factors: temperature, precipitation probability, wind conditions, and visibility. Also check UV levels for sun exposure and atmospheric pressure changes that might affect comfort levels.`;
+      let advice = 'For outdoor activities, current conditions: ';
+      const factors = [];
+      if (temp !== undefined) factors.push(`${temp.toFixed(0)}°C`);
+      if (wind !== undefined) factors.push(`${wind.toFixed(0)} km/h wind`);
+      if (precip !== undefined && precip > 1) factors.push(`${precip.toFixed(1)}mm rain`);
+      
+      return advice + (factors.length > 0 ? factors.join(', ') + '. ' : '') + 
+        'Check UV levels for sun exposure and watch for weather changes.';
     }
     
-    return `That's a great weather question! Weather patterns are complex and influenced by many factors. I'd recommend checking the specific weather variables most relevant to your needs. Is there a particular aspect of the weather you're most concerned about for your plans?`;
+    if (message.includes('current') || message.includes('now') || message.includes('today')) {
+      if (weatherData) {
+        return `Current conditions${location ? ` in ${location}` : ''}: Temperature ${temp?.toFixed(1)}°C, Wind ${wind?.toFixed(1)} km/h, Precipitation ${precip?.toFixed(1)}mm/h, Humidity ${humidity?.toFixed(0)}%. Check the dashboard for detailed forecasts.`;
+      }
+    }
+    
+    return `I can help with weather info${location ? ` for ${location}` : ''}! Ask about temperature, rain, wind, humidity, or current conditions. What would you like to know?`;
   };
 
   const handleSend = async () => {
