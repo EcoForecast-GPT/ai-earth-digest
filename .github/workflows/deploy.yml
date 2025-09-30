@@ -1,6 +1,6 @@
 name: Deploy Supabase Functions
 
-# Trigger the workflow on every push to main
+# Trigger workflow on push to main branch
 on:
   push:
     branches:
@@ -19,10 +19,11 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
 
-      # Step 3: Deploy Supabase functions using secrets
+      # Step 3: Deploy Supabase functions using secrets and project ref
       - name: Deploy Supabase Functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -30,10 +31,10 @@ jobs:
           echo "Deploying Supabase functions..."
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
-      # Optional: Confirm deployment
+      # Step 4: Optional – list deployed functions
       - name: List Deployed Functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          supabase functions list
+          supabase functions list --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
