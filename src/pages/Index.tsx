@@ -207,7 +207,7 @@ const Index = () => {
         <DataExport 
           weatherData={weatherData ? [weatherData] : []}
           location={selectedLocation}
-          date={selectedDate}
+          dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
         />
       ),
       priority: 6,
