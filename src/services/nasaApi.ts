@@ -19,11 +19,8 @@ export const fetchNASAWeatherData = async (
   endDate: string,
 ): Promise<NASAWeatherData> => {
   try {
-    const collection = "M2T1NXSLV.5.12.4";
-    const dataset = "MERRA2";
     const variables = [
-      `MERRA2:${collection}:T2M`, `MERRA2:${collection}:PRECTOTCORR`, `MERRA2:${collection}:QV2M`,
-      `MERRA2:${collection}:U10M`, `MERRA2:${collection}:V10M`, `MERRA2:${collection}:PS`,
+      "T2M", "PRECTOTCORR", "QV2M", "U10M", "V10M", "PS"
     ];
 
     const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
@@ -122,11 +119,9 @@ export const fetchNASAHistoricalData = async (
   endDate: string
 ): Promise<HistoricalDataPoint[]> => {
   try {
-    const collection = "M2T1NXSLV.5.12.4";
-    const dataset = "MERRA2";
     const variables = {
-      temperature: `MERRA2:${collection}:T2M`,
-      precipitation: `MERRA2:${collection}:PRECTOTCORR`,
+      temperature: "T2M",
+      precipitation: "PRECTOTCORR"
     };
 
     const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
