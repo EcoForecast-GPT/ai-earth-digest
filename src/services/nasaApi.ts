@@ -20,9 +20,10 @@ export const fetchNASAWeatherData = async (
 ): Promise<NASAWeatherData> => {
   try {
     const collection = "M2T1NXSLV.5.12.4";
+    const dataset = "MERRA2";
     const variables = [
-      `${collection}:T2M`, `${collection}:PRECTOTCORR`, `${collection}:QV2M`,
-      `${collection}:U10M`, `${collection}:V10M`, `${collection}:PS`,
+      `MERRA2:${collection}:T2M`, `MERRA2:${collection}:PRECTOTCORR`, `MERRA2:${collection}:QV2M`,
+      `MERRA2:${collection}:U10M`, `MERRA2:${collection}:V10M`, `MERRA2:${collection}:PS`,
     ];
 
     const requests = variables.map(variable => {
@@ -120,9 +121,10 @@ export const fetchNASAHistoricalData = async (
 ): Promise<HistoricalDataPoint[]> => {
   try {
     const collection = "M2T1NXSLV.5.12.4";
+    const dataset = "MERRA2";
     const variables = {
-      temperature: `${collection}:T2M`,
-      precipitation: `${collection}:PRECTOTCORR`,
+      temperature: `MERRA2:${collection}:T2M`,
+      precipitation: `MERRA2:${collection}:PRECTOTCORR`,
     };
 
     const requests = Object.values(variables).map(variable => {
