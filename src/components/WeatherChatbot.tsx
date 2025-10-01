@@ -98,16 +98,19 @@ export const WeatherChatbot = ({ weatherData, historicalData, location }: Weathe
         </DialogHeader>
         <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
           <div className="space-y-4">
-            {messages.map(msg => (
-              <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}>
-                <div className={`flex items-start gap-2 max-w-[85%] ${msg.isBot ? '' : 'flex-row-reverse'}`}>
-                  <div className={`p-2 rounded-full border ${msg.isBot ? 'bg-card text-primary' : 'bg-primary text-primary-foreground'}`}><{msg.isBot ? Bot : User} className="w-4 h-4" /></div>
-                  <div className={`px-3 py-2 rounded-lg border ${msg.isBot ? 'bg-card' : 'bg-primary/10'}`}>
-                    <p className="text-sm leading-relaxed">{msg.text}</p>
+            {messages.map(msg => {
+              const Icon = msg.isBot ? Bot : User;
+              return (
+                <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`flex items-start gap-2 max-w-[85%] ${msg.isBot ? '' : 'flex-row-reverse'}`}>
+                    <div className={`p-2 rounded-full border ${msg.isBot ? 'bg-card text-primary' : 'bg-primary text-primary-foreground'}`}><Icon className="w-4 h-4" /></div>
+                    <div className={`px-3 py-2 rounded-lg border ${msg.isBot ? 'bg-card' : 'bg-primary/10'}`}>
+                      <p className="text-sm leading-relaxed">{msg.text}</p>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
             {isLoading && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
                  <div className="flex items-start gap-2 max-w-[85%]">
