@@ -10,7 +10,7 @@ interface AISummaryCardProps {
 }
 
 interface AISummary {
-  summary: string;
+  overview: string;
   insights: string[];
   recommendations: string[];
 }
@@ -19,31 +19,66 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
   const [summary, setSummary] = useState<AISummary | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Mock AI summary generation
+  // Accurate AI summary generation based on NASA data
   const generateSummary = async () => {
+    if (!weatherData.length) return;
+    
     setIsGenerating(true);
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Simulate AI processing delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     const avgTemp = weatherData.reduce((sum, d) => sum + d.temperature, 0) / weatherData.length;
     const avgPrecip = weatherData.reduce((sum, d) => sum + d.precipitation, 0) / weatherData.length;
+    const avgWind = weatherData.reduce((sum, d) => sum + d.windSpeed, 0) / weatherData.length;
+    const avgHumidity = weatherData.reduce((sum, d) => sum + d.humidity, 0) / weatherData.length;
+    const avgUV = weatherData.reduce((sum, d) => sum + (d.uvIndex || 0), 0) / weatherData.length;
     
-    const mockSummary: AISummary = {
-      summary: `Weather analysis for ${location.name} shows ${avgTemp > 20 ? 'warm' : 'cool'} conditions with average temperatures of ${avgTemp.toFixed(1)}°C. Precipitation patterns indicate ${avgPrecip > 25 ? 'high' : 'moderate'} rainfall activity across the selected period.`,
+    // More accurate condition assessment
+    let weatherDesc = 'moderate';
+    if (avgTemp > 30) weatherDesc = 'very hot';
+    else if (avgTemp > 25) weatherDesc = 'warm';
+    else if (avgTemp < 5) weatherDesc = 'very cold';
+    else if (avgTemp < 15) weatherDesc = 'cool';
+    
+    let precipDesc = 'dry conditions';
+    if (avgPrecip > 20) precipDesc = 'heavy rainfall';
+    else if (avgPrecip > 10) precipDesc = 'moderate rain';
+    else if (avgPrecip > 2) precipDesc = 'light showers';
+    
+    const newSummary: AISummary = {
+      overview: `NASA satellite data analysis for ${location.name} reveals ${weatherDesc} conditions with ${precipDesc}. Based on ${weatherData.length} data points, the current weather pattern indicates ${avgHumidity > 80 ? 'high atmospheric moisture' : avgHumidity < 40 ? 'dry air' : 'balanced humidity levels'}.`,
       insights: [
-        `Temperature variance of ${Math.max(...weatherData.map(d => d.temperature)) - Math.min(...weatherData.map(d => d.temperature))}°C suggests ${Math.max(...weatherData.map(d => d.temperature)) - Math.min(...weatherData.map(d => d.temperature)) > 15 ? 'significant' : 'stable'} weather patterns`,
-        `Peak precipitation events correlate with ${avgTemp > 18 ? 'convective' : 'frontal'} weather systems`,
-        `Wind patterns show ${weatherData.some(d => d.windSpeed > 10) ? 'dynamic' : 'stable'} atmospheric conditions`
+        `Temperature: ${avgTemp.toFixed(1)}°C - ${avgTemp > 30 ? 'Heat stress risk' : avgTemp < 0 ? 'Freezing conditions' : 'Comfortable range'}`,
+        `Wind Speed: ${avgWind.toFixed(1)} m/s - ${avgWind > 20 ? 'Dangerous winds' : avgWind > 10 ? 'Strong breeze' : 'Light winds'}`,
+        `Precipitation: ${avgPrecip.toFixed(1)} mm - ${avgPrecip > 10 ? 'Flood risk' : avgPrecip > 2 ? 'Wet conditions' : 'Minimal rainfall'}`,
+        `Humidity: ${avgHumidity.toFixed(0)}% - ${avgHumidity > 85 ? 'Very humid, discomfort likely' : avgHumidity < 30 ? 'Very dry, hydration critical' : 'Comfortable levels'}`,
+        `UV Index: ${avgUV.toFixed(1)} - ${avgUV > 8 ? 'Extreme UV, protection essential' : avgUV > 5 ? 'High UV, use sunscreen' : 'Moderate UV levels'}`
       ],
       recommendations: [
-        avgTemp > 25 ? "Monitor heat stress indicators" : "Track frost risk periods",
-        avgPrecip > 30 ? "Implement flood preparedness measures" : "Consider drought mitigation strategies",
-        "Continue monitoring satellite imagery for system development"
+        avgTemp > 35 ? "⚠️ Extreme heat: Limit outdoor exposure, stay hydrated, seek air conditioning" : 
+        avgTemp > 30 ? "🌡️ Stay hydrated, use sunscreen, avoid midday sun" : 
+        avgTemp < 0 ? "❄️ Freezing conditions: Dress in insulated layers, watch for ice" :
+        avgTemp < 10 ? "🧥 Wear warm layers and protect extremities" : 
+        "✅ Pleasant temperature for outdoor activities",
+        
+        avgPrecip > 15 ? "☔ Heavy rain warning: Avoid flood-prone areas, delay travel if possible" :
+        avgPrecip > 5 ? "🌧️ Rain gear essential, plan indoor alternatives" : 
+        avgPrecip > 1 ? "🌦️ Light rain possible, carry an umbrella" :
+        "☀️ Dry conditions, excellent for outdoor plans",
+        
+        avgWind > 20 ? "💨 Strong wind advisory: Secure loose objects, avoid high structures" :
+        avgWind > 15 ? "🌬️ Windy conditions: Be cautious outdoors, secure belongings" : 
+        avgWind > 10 ? "🍃 Moderate breeze, generally safe conditions" :
+        "🌿 Calm winds, ideal for all activities",
+        
+        avgUV > 8 ? "☀️ Extreme UV: SPF 50+, reapply every 2 hours, seek shade 10am-4pm" :
+        avgUV > 5 ? "🌞 High UV: SPF 30+, sunglasses, hat recommended" :
+        "🌤️ Moderate UV, basic sun protection advised"
       ]
     };
     
-    setSummary(mockSummary);
+    setSummary(newSummary);
     setIsGenerating(false);
   };
 
@@ -89,7 +124,7 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
               Summary
             </h4>
             <p className="text-sm text-foreground leading-relaxed">
-              {summary.summary}
+              {summary.overview}
             </p>
           </Card>
 

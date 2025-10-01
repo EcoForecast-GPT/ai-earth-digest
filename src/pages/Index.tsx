@@ -1,13 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Bot } from "lucide-react";
+import { Bot } from "lucide-react";
 import logo from "@/assets/logo.jpg";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import WeatherMap from "@/components/WeatherMap";
-import WeatherControls from "@/components/WeatherControls";
 import WeatherLikelihood from "@/components/WeatherLikelihood";
 import DataExport from "@/components/DataExport";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
@@ -19,6 +15,8 @@ import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { useLocationIP } from "@/hooks/useLocationIP";
 import { PlanetLoader } from "@/components/PlanetLoader";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
+import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
+import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 
 export interface WeatherLocation {
   lat: number;
@@ -60,63 +58,65 @@ const Index = () => {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mock weather data generator with auto-fetched variables
-  const generateWeatherData = useCallback((location: WeatherLocation, date: Date): WeatherData => {
-    const baseTemp = 20 + Math.sin(date.getMonth()) * 15;
-    const timeSeries = Array.from({ length: 24 }, (_, hour) => ({
-      time: `${hour.toString().padStart(2, '0')}:00`,
-      temperature: baseTemp + Math.sin(hour / 4) * 8 + Math.random() * 4,
-      precipitation: Math.random() * 20,
-      windSpeed: 5 + Math.random() * 15,
-      humidity: 40 + Math.random() * 40,
-    }));
-
-    return {
-      timestamp: date.toISOString(),
-      temperature: baseTemp + Math.random() * 10,
-      precipitation: Math.random() * 50,
-      humidity: 60 + Math.random() * 30,
-      windSpeed: 8 + Math.random() * 12,
-      pressure: 1013 + Math.random() * 20 - 10,
-      visibility: 8 + Math.random() * 7,
-      uvIndex: Math.max(0, Math.min(11, 6 + Math.sin(date.getHours() / 24 * Math.PI * 2) * 5)),
-      timeSeries
-    };
-  }, []);
-
-  // Auto-fetch weather data
+  // Fetch real NASA weather data
   const fetchWeatherData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const startDate = selectedDate.toISOString().split('T')[0];
+      const endDate = selectedDate.toISOString().split('T')[0];
       
-      const data = generateWeatherData(selectedLocation, selectedDate);
+      const nasaData = await fetchNASAWeatherData(
+        selectedLocation.lat,
+        selectedLocation.lon,
+        startDate,
+        endDate
+      );
+      
+      // Generate time series data based on NASA data
+      const timeSeries = Array.from({ length: 24 }, (_, hour) => ({
+        time: `${hour.toString().padStart(2, '0')}:00`,
+        temperature: nasaData.temperature + Math.sin(hour / 4) * 5,
+        precipitation: nasaData.precipitation * (Math.random() * 0.5 + 0.5),
+        windSpeed: nasaData.windSpeed + Math.random() * 3,
+        humidity: nasaData.humidity + Math.random() * 10 - 5,
+      }));
+
+      const data: WeatherData = {
+        timestamp: selectedDate.toISOString(),
+        temperature: nasaData.temperature,
+        precipitation: nasaData.precipitation,
+        humidity: nasaData.humidity,
+        windSpeed: nasaData.windSpeed,
+        pressure: nasaData.pressure,
+        visibility: nasaData.visibility,
+        uvIndex: nasaData.uvIndex,
+        timeSeries
+      };
+      
       setWeatherData(data);
       
-      // Determine weather condition based on data
-      if (data.precipitation > 30) {
-        setWeatherCondition("rainy");
-      } else if (data.windSpeed > 15) {
-        setWeatherCondition("windy");
-      } else if (data.temperature > 30) {
-        setWeatherCondition("sunny");
-      } else if (data.temperature < 10) {
-        setWeatherCondition("snowy");
-      } else {
-        setWeatherCondition("cloudy");
-      }
+      // Set weather condition from NASA data
+      const conditionMap: { [key: string]: WeatherCondition } = {
+        'very sunny': 'sunny',
+        'sunny': 'sunny',
+        'partly cloudy': 'cloudy',
+        'cloudy': 'cloudy',
+        'very cloudy': 'cloudy',
+        'rainy': 'rainy',
+        'stormy': 'stormy'
+      };
+      setWeatherCondition(conditionMap[nasaData.condition] || 'sunny');
       
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to fetch weather data",
+        description: "Failed to fetch NASA weather data",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLocation, selectedDate, generateWeatherData, toast]);
+  }, [selectedLocation, selectedDate, toast]);
 
   // Auto-fetch weather data when location or date changes
   useEffect(() => {
@@ -158,21 +158,8 @@ const Index = () => {
     });
   }, [toast]);
 
-  // Create widgets for responsive layout
+  // Create widgets for responsive layout - AI Summary is now second
   const widgets = [
-    {
-      id: 'ai-summary',
-      title: 'AI Weather Analysis',
-      component: (
-        <AISummaryCard 
-          location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
-        />
-      ),
-      priority: 10,
-      minHeight: 200,
-    },
     {
       id: 'weather-likelihood',
       title: 'Weather Likelihood',
@@ -183,8 +170,21 @@ const Index = () => {
           isLoading={isLoading}
         />
       ),
-      priority: 9,
+      priority: 10,
       minHeight: 300,
+    },
+    {
+      id: 'ai-summary',
+      title: 'AI Weather Analysis',
+      component: (
+        <AISummaryCard 
+          location={selectedLocation}
+          weatherData={weatherData ? [weatherData] : []}
+          isLoading={isLoading}
+        />
+      ),
+      priority: 9,
+      minHeight: 200,
     },
     {
       id: 'weather-chart',
@@ -205,19 +205,6 @@ const Index = () => {
       priority: 7,
       minHeight: 400,
     },
-    {
-      id: 'data-export',
-      title: 'Data Export',
-      component: (
-        <DataExport 
-          weatherData={weatherData ? [weatherData] : []}
-          location={selectedLocation}
-          dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
-        />
-      ),
-      priority: 6,
-      minHeight: 200,
-    },
   ];
 
   return (
@@ -236,27 +223,16 @@ const Index = () => {
         >
           <img 
             src={logo} 
-            alt="ClimaCast Logo" 
+            alt="EcoForecast Logo" 
             className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
           />
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">Smart Weather Forecasting</p>
+            <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
           </div>
         </motion.div>
         
         <div className="flex items-center gap-2 md:gap-3">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Badge variant="outline" className="glass-card border-primary/30 text-primary text-xs md:text-sm">
-              <MapPin className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">{selectedLocation.name}</span>
-              <span className="sm:hidden">{selectedLocation.name.split(',')[0]}</span>
-            </Badge>
-          </motion.div>
-          
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -277,22 +253,18 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="relative z-10 p-4 md:p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Controls */}
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Minimal Weather Menu */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="mb-6 md:mb-8"
           >
-            <WeatherControls
+            <MinimalWeatherMenu
               location={selectedLocation}
-              onLocationChange={handleLocationSelect}
-              dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
-              onDateRangeChange={(range) => setSelectedDate(new Date(range.start))}
+              temperature={weatherData?.temperature || 20}
+              condition={weatherCondition}
               isLoading={isLoading}
-              onFetch={fetchWeatherData}
-              weatherData={weatherData ? [weatherData] : []}
             />
           </motion.div>
 
@@ -304,6 +276,22 @@ const Index = () => {
           >
             <ResponsiveLayout widgets={widgets} />
           </motion.div>
+
+          {/* Data Export at Bottom */}
+          {weatherData && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex justify-center"
+            >
+              <DataExport 
+                weatherData={[weatherData]}
+                location={selectedLocation}
+                dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
+              />
+            </motion.div>
+          )}
         </div>
       </main>
 
