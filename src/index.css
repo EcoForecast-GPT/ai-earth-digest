@@ -335,8 +335,8 @@
   .animated-bg-container {
     position: absolute;
     inset: 0;
-    background: hsl(0 0% 0%);
     z-index: 0;
+    transition: background 0.3s ease;
   }
 
   .animated-bg-container::after {

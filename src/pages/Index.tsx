@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot } from "lucide-react";
 import logo from "@/assets/logo.jpg";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import WeatherLikelihood from "@/components/WeatherLikelihood";
 import DataExport from "@/components/DataExport";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
 import AISummaryCard from "@/components/AISummaryCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { WeatherChatbot } from "@/components/WeatherChatbot";
+import { FloatingChatInput } from "@/components/FloatingChatInput";
 import { InteractiveWeatherMap } from "@/components/InteractiveWeatherMap";
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { useLocationIP } from "@/hooks/useLocationIP";
@@ -54,7 +52,6 @@ const Index = () => {
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
-  const [showChatbot, setShowChatbot] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -232,23 +229,7 @@ const Index = () => {
           </div>
         </motion.div>
         
-        <div className="flex items-center gap-2 md:gap-3">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowChatbot(!showChatbot)}
-              className="glass-card border-primary/30 hover:bg-primary/20"
-            >
-              <Bot className="w-4 h-4 text-primary" />
-            </Button>
-          </motion.div>
-          
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
       </motion.header>
 
       {/* Main Content */}
@@ -295,15 +276,11 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Weather Chatbot */}
-      <AnimatePresence>
-        {showChatbot && (
-          <WeatherChatbot 
-            weatherData={weatherData}
-            location={selectedLocation.name}
-          />
-        )}
-      </AnimatePresence>
+      {/* Floating Chat Input */}
+      <FloatingChatInput 
+        weatherData={weatherData}
+        location={selectedLocation.name}
+      />
 
       {/* Loading overlay */}
       <AnimatePresence>

@@ -48,12 +48,17 @@ export const fetchNASAWeatherData = async (
     const dates = Object.keys(parameters.T2M || {});
     const latestDate = dates[dates.length - 1];
 
-    const temperature = parameters.T2M?.[latestDate] || 20;
-    const precipitation = parameters.PRECTOTCORR?.[latestDate] || 0;
-    const humidity = parameters.RH2M?.[latestDate] || 60;
-    const windSpeed = parameters.WS2M?.[latestDate] || 5;
-    const pressure = parameters.PS?.[latestDate] || 101.3;
-    const uvIndex = parameters.ALLSKY_SFC_UV_INDEX?.[latestDate] || 5;
+    // NASA POWER uses -999 as fill value for missing data - filter these out
+    const getValidValue = (value: number, fallback: number): number => {
+      return (value === -999 || value === null || value === undefined) ? fallback : value;
+    };
+
+    const temperature = getValidValue(parameters.T2M?.[latestDate], 20);
+    const precipitation = getValidValue(parameters.PRECTOTCORR?.[latestDate], 0);
+    const humidity = getValidValue(parameters.RH2M?.[latestDate], 60);
+    const windSpeed = getValidValue(parameters.WS2M?.[latestDate], 5);
+    const pressure = getValidValue(parameters.PS?.[latestDate], 101.3);
+    const uvIndex = getValidValue(parameters.ALLSKY_SFC_UV_INDEX?.[latestDate], 5);
 
     // Determine weather condition based on data
     let condition: NASAWeatherData['condition'] = 'sunny';
