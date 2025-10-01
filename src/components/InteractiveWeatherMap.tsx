@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Map, Layers, Navigation, Thermometer, Wind, CloudRain, Eye } from 'lucide-react';
+import { Map, Layers, Navigation, Thermometer, Wind, CloudRain, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -9,41 +9,53 @@ interface WeatherMapProps {
   onLocationSelect: (location: { lat: number; lon: number; name: string }) => void;
 }
 
-const MAPTILER_API_KEY = 'GlbLuLlMNruYspOH4MNV';
+const MAPTILER_API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
+const OWM_API_KEY = import.meta.env.VITE_OPENWEATHERMAP_API_KEY;
 
 export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
+  const marker = useRef<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [activeLayer, setActiveLayer] = useState('temperature');
-  const [weatherData, setWeatherData] = useState<any>(null);
+  const [activeLayer, setActiveLayer] = useState('temp_new');
 
   // Weather layers configuration
   const weatherLayers = [
-    { id: 'temperature', name: 'Temperature', icon: Thermometer, color: 'text-red-400' },
-    { id: 'wind', name: 'Wind', icon: Wind, color: 'text-cyan-400' },
-    { id: 'precipitation', name: 'Rain', icon: CloudRain, color: 'text-blue-400' },
-    { id: 'visibility', name: 'Visibility', icon: Eye, color: 'text-purple-400' },
+    { id: 'temp_new', name: 'Temperature', icon: Thermometer, color: 'text-red-400' },
+    { id: 'wind_new', name: 'Wind', icon: Wind, color: 'text-cyan-400' },
+    { id: 'precipitation_new', name: 'Rain', icon: CloudRain, color: 'text-blue-400' },
+    { id: 'clouds_new', name: 'Clouds', icon: Cloud, color: 'text-gray-400' },
   ];
 
   // Initialize MapLibre with MapTiler
-  useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+  const initializeMap = useCallback(() => {
+    if (!mapContainer.current || map.current || !window.maplibregl) {
+      return;
+    }
 
+  useEffect(() => {
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {
+      if (window.maplibregl) {
+        initializeMap();
+        initializeMapInternal();
+        return;
+      }
+
       try {
         // Add CSS
         const link = document.createElement('link');
-        link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
+        link.href = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css';
         link.rel = 'stylesheet';
         document.head.appendChild(link);
 
         // Add JS
         const script = document.createElement('script');
-        script.src = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
+        script.src = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js';
         script.onload = initializeMap;
+        script.onload = initializeMapInternal;
         document.head.appendChild(script);
+
       } catch (error) {
         console.error('Failed to load MapLibre:', error);
         setIsLoaded(true); // Show fallback
@@ -51,6 +63,11 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     };
 
     const initializeMap = () => {
+    const initializeMapInternal = () => {
+      if (!mapContainer.current || map.current) {
+        return;
+      }
+
       try {
         // @ts-ignore - MapLibre loaded dynamically
         const maplibregl = window.maplibregl;
@@ -70,7 +87,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
 
         map.current.on('load', () => {
           setIsLoaded(true);
-          addWeatherLayers();
+          addWeatherLayer(activeLayer);
           addLocationMarker();
         });
 
@@ -85,27 +102,23 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       }
     };
 
-    const addWeatherLayers = () => {
-      // Add OpenWeatherMap weather layers
-      const weatherSources = {
-        temperature: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        wind: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        precipitation: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        visibility: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-      };
+    const addWeatherLayer = (layerId: string) => {
+      if (!map.current || !OWM_API_KEY) return;
+      const sourceId = 'weather-source';
+      const layerIdOnMap = 'weather-layer';
 
-      // Note: In production, you'd need a valid OpenWeatherMap API key
-      // For demo, we'll create mock weather overlay
-      map.current.addSource('weather-overlay', {
+      if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
+      if (map.current.getLayer(layerIdOnMap)) map.current.removeLayer(layerIdOnMap);
+
+      map.current.addSource(sourceId, {
         type: 'raster',
-        tiles: [weatherSources[activeLayer as keyof typeof weatherSources]],
+        tiles: [`https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
         tileSize: 256,
       });
-
       map.current.addLayer({
-        id: 'weather-layer',
+        id: layerIdOnMap,
         type: 'raster',
-        source: 'weather-overlay',
+        source: sourceId,
         paint: {
           'raster-opacity': 0.6,
         },
@@ -113,26 +126,17 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     };
 
     const addLocationMarker = () => {
-      // @ts-ignore
+      // @ts-ignore - MapLibre loaded dynamically
       const maplibregl = window.maplibregl;
       if (!maplibregl) return;
 
-      const el = document.createElement('div');
-      el.className = 'location-marker';
-      el.style.cssText = `
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, hsl(180 100% 50%), hsl(150 100% 45%));
-        border: 3px solid white;
-        box-shadow: 0 0 20px hsl(180 100% 50% / 0.6);
-        cursor: pointer;
-        animation: pulse 2s infinite;
-      `;
-
-      new maplibregl.Marker(el)
-        .setLngLat([location.lon, location.lat])
-        .addTo(map.current);
+      if (marker.current) {
+        marker.current.setLngLat([location.lon, location.lat]);
+      } else {
+        marker.current = new maplibregl.Marker({ color: "hsl(180 100% 50%)", scale: 1.2 })
+          .setLngLat([location.lon, location.lat])
+          .addTo(map.current);
+      }
     };
 
     loadMapLibre();
@@ -143,60 +147,64 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         map.current = null;
       }
     };
-  }, []);
+  }, [activeLayer, location.lat, location.lon]);
+  }, [activeLayer]); // Rerun only when activeLayer changes
+
+  // Effect to update map center and marker when location prop changes
+  useEffect(() => {
+    if (map.current && map.current.isStyleLoaded()) {
+      map.current.flyTo({
+        center: [location.lon, location.lat],
+        zoom: 8,
+        speed: 1.2,
+      });
+
+      // @ts-ignore
+      if (marker.current) {
+        marker.current.setLngLat([location.lon, location.lat]);
+      }
+    }
+  }, [location.lat, location.lon]);
 
   const fetchLocationName = async (lat: number, lon: number) => {
     try {
-      // Mock reverse geocoding - in production use a real service
-      const cityNames = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia'];
-      const randomCity = cityNames[Math.floor(Math.random() * cityNames.length)];
-      
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      if (!response.ok) {
+        throw new Error('Reverse geocoding failed');
+      }
+      const data = await response.json();
+      const name = data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
       onLocationSelect({
         lat: lat,
         lon: lon,
-        name: `${randomCity}, USA`
+        name: name
       });
     } catch (error) {
       console.error('Geocoding failed:', error);
       onLocationSelect({
         lat: lat,
         lon: lon,
-        name: `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+        name: `${lat.toFixed(4)}, ${lon.toFixed(4)}`
       });
     }
   };
 
-  const switchWeatherLayer = (layerId: string) => {
+  const switchWeatherLayer = useCallback((layerId: string) => {
     setActiveLayer(layerId);
-    if (map.current && map.current.getLayer('weather-layer')) {
-      // Update the weather layer source
-      map.current.removeLayer('weather-layer');
-      map.current.removeSource('weather-overlay');
-      
-      // Add new layer (simplified for demo)
-      setTimeout(() => {
-        if (map.current) {
-          map.current.addSource('weather-overlay', {
-            type: 'raster',
-            tiles: [`https://tile.openweathermap.org/map/${layerId}_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`],
-            tileSize: 256,
-          });
-
-          map.current.addLayer({
-            id: 'weather-layer',
-            type: 'raster',
-            source: 'weather-overlay',
-            paint: {
-              'raster-opacity': 0.6,
-            },
-          });
-        }
-      }, 100);
+    if (map.current && map.current.isStyleLoaded() && OWM_API_KEY) {
+      const source = map.current.getSource('weather-source');
+      if (source) {
+        source.tiles = [`https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`];
+        map.current.getSourceCache(source.id).clearTiles();
+        map.current.getSourceCache(source.id).update(map.current.transform);
+        map.current.triggerRepaint();
+      }
     }
-  };
+  }, []);
 
   // Fallback UI if map fails to load
-  if (!isLoaded && map.current === null) {
+  if (true) { // Always render the container, map will attach to it.
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -282,6 +290,4 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       </motion.div>
     );
   }
-
-  return null; // Map will render in the container
 };

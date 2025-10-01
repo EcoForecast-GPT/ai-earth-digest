@@ -22,7 +22,7 @@ export interface WeatherLocation {
   name: string;
 }
 
-export type WeatherCondition = "sunny" | "cloudy" | "rainy" | "stormy" | "snowy" | "windy";
+export type WeatherCondition = 'very sunny' | 'sunny' | 'partly cloudy' | 'cloudy' | 'very cloudy' | 'rainy' | 'stormy';
 
 export interface WeatherData {
   timestamp: string;
@@ -33,13 +33,6 @@ export interface WeatherData {
   pressure: number;
   visibility: number;
   uvIndex: number;
-  timeSeries: Array<{
-    time: string;
-    temperature: number;
-    precipitation: number;
-    windSpeed: number;
-    humidity: number;
-  }>;
 }
 
 const Index = () => {
@@ -51,7 +44,7 @@ const Index = () => {
     name: "New York, NY"
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
+  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>('sunny');
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -66,48 +59,24 @@ const Index = () => {
         selectedLocation.lat,
         selectedLocation.lon,
         startDate,
-        endDate
+        endDate,
+        "XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG"
       );
       
-      // Generate time series data based on NASA data
-      const timeSeries = Array.from({ length: 24 }, (_, hour) => ({
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        temperature: nasaData.temperature + Math.sin(hour / 4) * 5,
-        precipitation: nasaData.precipitation * (Math.random() * 0.5 + 0.5),
-        windSpeed: nasaData.windSpeed + Math.random() * 3,
-        humidity: nasaData.humidity + Math.random() * 10 - 5,
-      }));
-
       const data: WeatherData = {
         timestamp: selectedDate.toISOString(),
-        temperature: nasaData.temperature,
-        precipitation: nasaData.precipitation,
-        humidity: nasaData.humidity,
-        windSpeed: nasaData.windSpeed,
-        pressure: nasaData.pressure,
-        visibility: nasaData.visibility,
-        uvIndex: nasaData.uvIndex,
-        timeSeries
+        ...nasaData
       };
       
       setWeatherData(data);
       
       // Set weather condition from NASA data
-      const conditionMap: { [key: string]: WeatherCondition } = {
-        'very sunny': 'sunny',
-        'sunny': 'sunny',
-        'partly cloudy': 'cloudy',
-        'cloudy': 'cloudy',
-        'very cloudy': 'cloudy',
-        'rainy': 'rainy',
-        'stormy': 'stormy'
-      };
-      setWeatherCondition(conditionMap[nasaData.condition] || 'sunny');
+      setWeatherCondition(nasaData.condition || 'sunny');
       
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to fetch NASA weather data",
+        description: (error as Error).message || "Failed to fetch NASA weather data. The location may not be supported.",
         variant: "destructive",
       });
     } finally {
@@ -118,12 +87,11 @@ const Index = () => {
   // Auto-fetch weather data when location or date changes
   useEffect(() => {
     fetchWeatherData();
-  }, [selectedLocation, selectedDate, fetchWeatherData]);
+  }, [fetchWeatherData]);
 
-  // Update location when auto-location is available - only once per location change
+  // Update location when auto-location is available
   useEffect(() => {
     if (autoLocation && !locationLoading) {
-      // Only update if the location actually changed
       if (selectedLocation.lat !== autoLocation.lat || selectedLocation.lon !== autoLocation.lon) {
         setSelectedLocation({
           lat: autoLocation.lat,
@@ -131,20 +99,13 @@ const Index = () => {
           name: autoLocation.name
         });
         
-        if (autoLocation.source === 'gps') {
-          toast({
-            title: "Location detected",
-            description: `Using GPS location: ${autoLocation.name}`,
-          });
-        } else if (autoLocation.source === 'ip') {
-          toast({
-            title: "Location detected",
-            description: `Using IP location: ${autoLocation.name}`,
-          });
-        }
+        toast({
+          title: "Location detected",
+          description: `Using ${autoLocation.source === 'gps' ? 'GPS' : 'IP'} location: ${autoLocation.name}`,
+        });
       }
     }
-  }, [autoLocation?.lat, autoLocation?.lon, locationLoading]); // Only depend on lat/lon changes
+  }, [autoLocation, locationLoading, selectedLocation.lat, selectedLocation.lon, toast]);
 
   const handleLocationSelect = useCallback((location: WeatherLocation) => {
     setSelectedLocation(location);
@@ -243,7 +204,7 @@ const Index = () => {
           >
             <MinimalWeatherMenu
               location={selectedLocation}
-              temperature={weatherData?.temperature || 20}
+              temperature={weatherData?.temperature ?? 0}
               condition={weatherCondition}
               isLoading={isLoading}
             />
