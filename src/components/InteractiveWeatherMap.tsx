@@ -27,42 +27,44 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     { id: 'clouds_new', name: 'Clouds', icon: Cloud, color: 'text-gray-400' },
   ];
 
-  // Initialize MapLibre with MapTiler
-  const initializeMap = useCallback(() => {
-    if (!mapContainer.current || map.current || !window.maplibregl) {
-      return;
-    }
-
   useEffect(() => {
-    // Dynamically load MapLibre GL JS
-    const loadMapLibre = async () => {
-      if (window.maplibregl) {
-        initializeMap();
-        initializeMapInternal();
-        return;
-      }
+    const addWeatherLayer = (layerId: string) => {
+      if (!map.current || !OWM_API_KEY) return;
+      const sourceId = 'weather-source';
+      const layerIdOnMap = 'weather-layer';
 
-      try {
-        // Add CSS
-        const link = document.createElement('link');
-        link.href = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
+      if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
+      if (map.current.getLayer(layerIdOnMap)) map.current.removeLayer(layerIdOnMap);
 
-        // Add JS
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js';
-        script.onload = initializeMap;
-        script.onload = initializeMapInternal;
-        document.head.appendChild(script);
+      map.current.addSource(sourceId, {
+        type: 'raster',
+        tiles: [`https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
+        tileSize: 256,
+      });
+      map.current.addLayer({
+        id: layerIdOnMap,
+        type: 'raster',
+        source: sourceId,
+        paint: {
+          'raster-opacity': 0.6,
+        },
+      });
+    };
 
-      } catch (error) {
-        console.error('Failed to load MapLibre:', error);
-        setIsLoaded(true); // Show fallback
+    const addLocationMarker = () => {
+      // @ts-ignore - MapLibre loaded dynamically
+      const maplibregl = window.maplibregl;
+      if (!maplibregl) return;
+
+      if (marker.current) {
+        marker.current.setLngLat([location.lon, location.lat]);
+      } else {
+        marker.current = new maplibregl.Marker({ color: "hsl(180 100% 50%)", scale: 1.2 })
+          .setLngLat([location.lon, location.lat])
+          .addTo(map.current);
       }
     };
 
-    const initializeMap = () => {
     const initializeMapInternal = () => {
       if (!mapContainer.current || map.current) {
         return;
@@ -102,40 +104,28 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       }
     };
 
-    const addWeatherLayer = (layerId: string) => {
-      if (!map.current || !OWM_API_KEY) return;
-      const sourceId = 'weather-source';
-      const layerIdOnMap = 'weather-layer';
+    const loadMapLibre = () => {
+      if (window.maplibregl) {
+        initializeMapInternal();
+        return;
+      }
 
-      if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
-      if (map.current.getLayer(layerIdOnMap)) map.current.removeLayer(layerIdOnMap);
+      try {
+        // Add CSS
+        const link = document.createElement('link');
+        link.href = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css';
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
 
-      map.current.addSource(sourceId, {
-        type: 'raster',
-        tiles: [`https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
-        tileSize: 256,
-      });
-      map.current.addLayer({
-        id: layerIdOnMap,
-        type: 'raster',
-        source: sourceId,
-        paint: {
-          'raster-opacity': 0.6,
-        },
-      });
-    };
+        // Add JS
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js';
+        script.onload = initializeMapInternal;
+        document.head.appendChild(script);
 
-    const addLocationMarker = () => {
-      // @ts-ignore - MapLibre loaded dynamically
-      const maplibregl = window.maplibregl;
-      if (!maplibregl) return;
-
-      if (marker.current) {
-        marker.current.setLngLat([location.lon, location.lat]);
-      } else {
-        marker.current = new maplibregl.Marker({ color: "hsl(180 100% 50%)", scale: 1.2 })
-          .setLngLat([location.lon, location.lat])
-          .addTo(map.current);
+      } catch (error) {
+        console.error('Failed to load MapLibre:', error);
+        setIsLoaded(true); // Show fallback
       }
     };
 
@@ -146,9 +136,17 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         map.current.remove();
         map.current = null;
       }
+      // It's good practice to clean up dynamically added scripts and styles
+      const scriptElement = document.querySelector('script[src="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js"]');
+      if (scriptElement) {
+        scriptElement.remove();
+      }
+      const styleElement = document.querySelector('link[href="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css"]');
+      if (styleElement) {
+        styleElement.remove();
+      }
     };
-  }, [activeLayer, location.lat, location.lon]);
-  }, [activeLayer]); // Rerun only when activeLayer changes
+  }, []); // Run this effect only once on mount
 
   // Effect to update map center and marker when location prop changes
   useEffect(() => {
