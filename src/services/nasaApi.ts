@@ -40,7 +40,7 @@ export const fetchNASAWeatherData = async (
     const data = await Promise.all(responses.map(async (response, index) => {
       if (!response.ok) {
         const errorBody = await response.text();
-        throw new Error(`Failed to fetch data for ${variables[index].split(':')[1]}: ${errorBody}`);
+        throw new Error(`Failed to fetch data for ${variables[index]}: ${errorBody}`);
       }
       return response.text();
     }));
@@ -48,10 +48,10 @@ export const fetchNASAWeatherData = async (
     const parsedData: { [key: string]: number } = {};
     data.forEach((text, index) => {
       const lines = text.trim().split('\n');
-      if (lines.length < 2) throw new Error(`No data for ${variables[index].split(':')[1]}`);
+      if (lines.length < 2) throw new Error(`No data for ${variables[index]}`);
       const lastLine = lines[lines.length - 1];
       const values = lastLine.trim().split(/\s+/);
-      parsedData[variables[index].split(':')[1]] = parseFloat(values[values.length - 1]);
+      parsedData[variables[index]] = parseFloat(values[values.length - 1]);
     });
 
     const temperature = parsedData.T2M - 273.15;
