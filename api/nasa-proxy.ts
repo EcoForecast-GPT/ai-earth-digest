@@ -1,7 +1,7 @@
 import type { Request, Response } from '@vercel/node';
 
 export default async function handler(req: Request, res: Response) {
-  const NASA_API_URL = 'https://goldsmr4.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi';
+  const NASA_API_URL = 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi';
 
   try {
     // Reconstruct the NASA API URL from the incoming request's query parameters
