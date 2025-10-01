@@ -1,52 +1,39 @@
 import type { Request, Response } from '@vercel/node';
 
 export default async function handler(req: Request, res: Response) {
-  const NASA_API_URL = 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi';
-  const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
+  const NASA_POWER_URL = 'https://power.larc.nasa.gov/api/temporal/hourly/point';
 
   try {
-    // Reconstruct the NASA API URL from the incoming request's query parameters
-    const searchParams = new URL(req.url!, `http://${req.headers.host}`).searchParams;
-    // Add API key to query params if not present
-    if (!searchParams.has('api_key')) {
-      searchParams.append('api_key', NASA_API_KEY);
-    }
-    const fullNasaUrl = `${NASA_API_URL}?${searchParams.toString()}`;
+    const { lat, lon, start, end } = req.query;
+    
+    // Construct NASA POWER API request
+    const parameters = [
+      'T2M',           // Temperature at 2 Meters (°C)
+      'PRECTOT',       // Precipitation (mm/day)
+      'RH2M',          // Relative Humidity at 2 Meters (%)
+      'WS2M',          // Wind Speed at 2 Meters (m/s)
+      'PS'             // Surface Pressure (kPa)
+    ].join(',');
 
-    // Fetch data from the actual NASA API
-    const nasaRes = await fetch(fullNasaUrl);
+    const powerUrl = `${NASA_POWER_URL}?parameters=${parameters}&community=RE&longitude=${lon}&latitude=${lat}&start=${start}&end=${end}&format=JSON`;
 
-    // Check if the request to NASA was successful
+    // Fetch data from NASA POWER API
+    const nasaRes = await fetch(powerUrl);
+
     if (!nasaRes.ok) {
       const errorText = await nasaRes.text();
-      res.status(nasaRes.status).send(`Error from NASA API: ${errorText}`);
+      res.status(nasaRes.status).json({ error: `Error from NASA POWER API: ${errorText}` });
       return;
     }
 
-    // Stream the response from NASA back to the client
-    // Set the appropriate content-type header from the NASA response
-    res.setHeader('Content-Type', nasaRes.headers.get('Content-Type') || 'text/plain');
-    // Vercel automatically handles caching, but we can add this for clarity
+    const data = await nasaRes.json();
+    
+    // Return the processed data
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
-
-    // Pipe the body of the response
-    const readableStream = nasaRes.body;
-    if (readableStream) {
-        const reader = readableStream.getReader();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            res.write(value);
-        }
-        res.end();
-    } else {
-        res.status(500).send('No readable stream from NASA API');
-    }
+    res.json(data);
 
   } catch (error) {
-    console.error('Proxy error:', error);
-    res.status(500).send('Internal Server Error in proxy.');
+    console.error('Error in NASA POWER API proxy:', error);
+    res.status(500).json({ error: 'Internal Server Error in proxy.' });
   }
 }

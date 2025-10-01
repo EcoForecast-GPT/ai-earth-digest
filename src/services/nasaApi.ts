@@ -1,72 +1,64 @@
-// NASA GES DISC API Service for weather data using MERRA-2
-const NASA_GES_DISC_BASE_URL = "/api/nasa-proxy";
-
-// --- CURRENT WEATHER DATA ---
+// NASA POWER API Service for weather data
+const NASA_API_BASE_URL = "/api/nasa-proxy";
 
 export interface NASAWeatherData {
   temperature: number; // Celsius
-  precipitation: number; // kg/m^2/hr
+  precipitation: number; // mm/day
   humidity: number; // percentage
   windSpeed: number; // m/s
-  pressure: number; // hPa
+  pressure: number; // kPa
   condition: 'very sunny' | 'sunny' | 'partly cloudy' | 'cloudy' | 'very cloudy' | 'rainy' | 'stormy';
+}
+
+interface NasaPowerResponse {
+  properties: {
+    parameter: {
+      T2M: { [key: string]: number };       // Temperature
+      PRECTOT: { [key: string]: number };   // Precipitation
+      RH2M: { [key: string]: number };      // Humidity
+      WS2M: { [key: string]: number };      // Wind Speed
+      PS: { [key: string]: number };        // Pressure
+    };
+  };
 }
 
 export const fetchNASAWeatherData = async (
   lat: number,
   lon: number,
-  startDate: string,
-  endDate: string,
+  date: string,
 ): Promise<NASAWeatherData> => {
   try {
-    const variables = [
-      "T2M", "PRECTOTCORR", "QV2M", "U10M", "V10M", "PS"
-    ];
+    // Format date as YYYYMMDD for NASA POWER API
+    const formattedDate = date.split('T')[0].replace(/-/g, '');
+    const response = await fetch(
+      `${NASA_API_BASE_URL}?lat=${lat}&lon=${lon}&start=${formattedDate}&end=${formattedDate}`
+    );
 
-    const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
-    const requests = variables.map(variable => {
-      const params = new URLSearchParams({
-        variable,
-        location: `GEOM:POINT(${lon}, ${lat})`,
-        startDate: `${startDate}T00:00:00Z`,
-        endDate: `${endDate}T23:59:59Z`,
-        type: 'asc2',
-        api_key: NASA_API_KEY,
-      });
-      return fetch(`${NASA_GES_DISC_BASE_URL}?${params}`);
-    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch weather data');
+    }
 
-    const responses = await Promise.all(requests);
-    const data = await Promise.all(responses.map(async (response, index) => {
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Failed to fetch data for ${variables[index]}: ${errorBody}`);
-      }
-      return response.text();
-    }));
+    const data: NasaPowerResponse = await response.json();
+    
+    // Get the latest timestamp's data
+    const timestamps = Object.keys(data.properties.parameter.T2M);
+    const latestTimestamp = timestamps[timestamps.length - 1];
 
-    const parsedData: { [key: string]: number } = {};
-    data.forEach((text, index) => {
-      const lines = text.trim().split('\n');
-      if (lines.length < 2) throw new Error(`No data for ${variables[index]}`);
-      const lastLine = lines[lines.length - 1];
-      const values = lastLine.trim().split(/\s+/);
-      parsedData[variables[index]] = parseFloat(values[values.length - 1]);
-    });
+    // Extract weather data
+    const temperature = data.properties.parameter.T2M[latestTimestamp];      // Already in Celsius
+    const precipitation = data.properties.parameter.PRECTOT[latestTimestamp]; // mm/day
+    const humidity = data.properties.parameter.RH2M[latestTimestamp];        // %
+    const windSpeed = data.properties.parameter.WS2M[latestTimestamp];       // m/s
+    const pressure = data.properties.parameter.PS[latestTimestamp];          // kPa
 
-    const temperature = parsedData.T2M - 273.15;
-    const precipitation = parsedData.PRECTOTCORR * 3600;
-    const saturationVaporPressure = 6.112 * Math.exp((17.67 * temperature) / (temperature + 243.5));
-    const vaporPressure = (parsedData.PS / 100 * parsedData.QV2M) / (0.622 + (1 - 0.622) * parsedData.QV2M);
-    const humidity = Math.min(100, (vaporPressure / saturationVaporPressure) * 100);
-    const windSpeed = Math.sqrt(parsedData.U10M ** 2 + parsedData.V10M ** 2);
-    const pressure = parsedData.PS / 100;
-
+    // Determine weather condition based on precipitation and humidity
     let condition: NASAWeatherData['condition'] = 'sunny';
-    if (precipitation > 0.1) condition = precipitation > 2.5 ? 'stormy' : 'rainy';
+    if (precipitation > 5) condition = 'stormy';
+    else if (precipitation > 0.5) condition = 'rainy';
     else if (humidity > 85) condition = 'very cloudy';
     else if (humidity > 70) condition = 'cloudy';
     else if (humidity > 50) condition = 'partly cloudy';
+    else if (humidity <= 30) condition = 'very sunny';
 
     return { temperature, precipitation, humidity, windSpeed, pressure, condition };
 
@@ -84,74 +76,34 @@ export interface HistoricalDataPoint {
   precipitation: number | null;
 }
 
-const parseTimeSeries = (text: string, variableName: 'temperature' | 'precipitation') => {
-  const data: { [timestamp: string]: Partial<HistoricalDataPoint> } = {};
-  const lines = text.trim().split('\n');
-  // Skip header lines that don't start with a date
-  const dataLines = lines.filter(line => line.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/));
-  
-  dataLines.forEach(line => {
-    const parts = line.trim().split(/\s+/);
-    const timestamp = parts[0];
-    let value: number | null = parseFloat(parts[1]);
-
-    if (isNaN(value) || value < -999) { // MERRA-2 uses -9999 for fill values
-      value = null;
-    } else {
-      if (variableName === 'temperature') {
-        value -= 273.15; // Kelvin to Celsius
-      } else if (variableName === 'precipitation') {
-        value *= 3600; // kg/m^2/s to kg/m^2/hr (mm/hr)
-      }
-    }
-
-    if (!data[timestamp]) data[timestamp] = { timestamp };
-    data[timestamp][variableName] = value;
-  });
-
-  return data;
-};
-
-export const fetchNASAHistoricalData = async (
+export const fetchHistoricalData = async (
   lat: number,
   lon: number,
   startDate: string,
   endDate: string
 ): Promise<HistoricalDataPoint[]> => {
   try {
-    const variables = {
-      temperature: "T2M",
-      precipitation: "PRECTOTCORR"
-    };
+    // Format dates as YYYYMMDD for NASA POWER API
+    const formattedStart = startDate.replace(/-/g, '');
+    const formattedEnd = endDate.replace(/-/g, '');
 
-    const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
-    const requests = Object.values(variables).map(variable => {
-      const params = new URLSearchParams({
-        variable,
-        location: `GEOM:POINT(${lon}, ${lat})`,
-        startDate: `${startDate}T00:00:00Z`,
-        endDate: `${endDate}T23:59:59Z`,
-        type: 'asc2',
-        api_key: NASA_API_KEY,
-      });
-      return fetch(`${NASA_GES_DISC_BASE_URL}?${params}`);
-    });
+    const response = await fetch(
+      `${NASA_API_BASE_URL}?lat=${lat}&lon=${lon}&start=${formattedStart}&end=${formattedEnd}`
+    );
 
-    const responses = await Promise.all(requests);
-    const [tempText, precipText] = await Promise.all(responses.map(res => res.text()));
+    if (!response.ok) {
+      throw new Error('Failed to fetch historical data');
+    }
 
-    if (!responses[0].ok) throw new Error(`Failed to fetch temperature data: ${tempText}`);
-    if (!responses[1].ok) throw new Error(`Failed to fetch precipitation data: ${precipText}`);
-
-    const tempData = parseTimeSeries(tempText, 'temperature');
-    const precipData = parseTimeSeries(precipText, 'precipitation');
-
-    // Merge data based on timestamp
-    const merged: { [timestamp: string]: HistoricalDataPoint } = {};
-    Object.values(tempData).forEach(d => { if(d.timestamp) merged[d.timestamp] = { ...merged[d.timestamp], ...d }; });
-    Object.values(precipData).forEach(d => { if(d.timestamp) merged[d.timestamp] = { ...merged[d.timestamp], ...d }; });
-
-    return Object.values(merged).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const data: NasaPowerResponse = await response.json();
+    // Extract weather data points
+    const timestamps = Object.keys(data.properties.parameter.T2M);
+    
+    return timestamps.map(timestamp => ({
+      timestamp,
+      temperature: data.properties.parameter.T2M[timestamp],      // Already in Celsius
+      precipitation: data.properties.parameter.PRECTOT[timestamp], // mm/day
+    })).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
   } catch (error) {
     console.error('Error fetching NASA historical data:', error);
