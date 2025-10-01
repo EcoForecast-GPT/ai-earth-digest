@@ -26,6 +26,7 @@ export const fetchNASAWeatherData = async (
       `MERRA2:${collection}:U10M`, `MERRA2:${collection}:V10M`, `MERRA2:${collection}:PS`,
     ];
 
+    const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
     const requests = variables.map(variable => {
       const params = new URLSearchParams({
         variable,
@@ -33,6 +34,7 @@ export const fetchNASAWeatherData = async (
         startDate: `${startDate}T00:00:00Z`,
         endDate: `${endDate}T23:59:59Z`,
         type: 'asc2',
+        api_key: NASA_API_KEY,
       });
       return fetch(`${NASA_GES_DISC_BASE_URL}?${params}`);
     });
@@ -127,6 +129,7 @@ export const fetchNASAHistoricalData = async (
       precipitation: `MERRA2:${collection}:PRECTOTCORR`,
     };
 
+    const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
     const requests = Object.values(variables).map(variable => {
       const params = new URLSearchParams({
         variable,
@@ -134,6 +137,7 @@ export const fetchNASAHistoricalData = async (
         startDate: `${startDate}T00:00:00Z`,
         endDate: `${endDate}T23:59:59Z`,
         type: 'asc2',
+        api_key: NASA_API_KEY,
       });
       return fetch(`${NASA_GES_DISC_BASE_URL}?${params}`);
     });

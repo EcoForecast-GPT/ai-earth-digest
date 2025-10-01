@@ -2,10 +2,15 @@ import type { Request, Response } from '@vercel/node';
 
 export default async function handler(req: Request, res: Response) {
   const NASA_API_URL = 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi';
+  const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
 
   try {
     // Reconstruct the NASA API URL from the incoming request's query parameters
     const searchParams = new URL(req.url!, `http://${req.headers.host}`).searchParams;
+    // Add API key to query params if not present
+    if (!searchParams.has('api_key')) {
+      searchParams.append('api_key', NASA_API_KEY);
+    }
     const fullNasaUrl = `${NASA_API_URL}?${searchParams.toString()}`;
 
     // Fetch data from the actual NASA API
