@@ -1,5 +1,5 @@
 // NASA GES DISC API Service for weather data using MERRA-2
-const NASA_GES_DISC_BASE_URL = "https://goldsmr4.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi";
+const NASA_GES_DISC_BASE_URL = "/api/nasa-proxy";
 
 // --- CURRENT WEATHER DATA ---
 
