@@ -5,16 +5,14 @@ import { useToast } from "@/hooks/use-toast";
 import WeatherLikelihood from "@/components/WeatherLikelihood";
 import DataExport from "@/components/DataExport";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
-import AISummaryCard from "@/components/AISummaryCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { FloatingChatInput } from "@/components/FloatingChatInput";
+import { WeatherChatbot } from "@/components/WeatherChatbot";
 import { InteractiveWeatherMap } from "@/components/InteractiveWeatherMap";
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
-import { useLocationIP } from "@/hooks/useLocationIP";
 import { PlanetLoader } from "@/components/PlanetLoader";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
-import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
+import { fetchNASAWeatherData, fetchNASAHistoricalData, HistoricalDataPoint } from "@/services/nasaApi";
 
 export interface WeatherLocation {
   lat: number;
@@ -31,233 +29,107 @@ export interface WeatherData {
   humidity: number;
   windSpeed: number;
   pressure: number;
-  visibility: number;
-  uvIndex: number;
 }
 
 const Index = () => {
   const { toast } = useToast();
-  const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
-    lat: 40.7128,
-    lon: -74.0060,
-    name: "New York, NY"
+    lat: 25.05,
+    lon: 55.13,
+    name: "Dubai, UAE"
   });
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>('sunny');
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [historicalData, setHistoricalData] = useState<HistoricalDataPoint[]>([]);
+  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>('sunny');
+  const [isCurrentWeatherLoading, setIsCurrentWeatherLoading] = useState(true);
+  const [isHistoricalLoading, setIsHistoricalLoading] = useState(true);
 
-  // Fetch real NASA weather data
-  const fetchWeatherData = useCallback(async () => {
-    setIsLoading(true);
+  const fetchCurrentWeatherData = useCallback(async () => {
+    setIsCurrentWeatherLoading(true);
     try {
-      const startDate = selectedDate.toISOString().split('T')[0];
-      const endDate = selectedDate.toISOString().split('T')[0];
-      
-      const nasaData = await fetchNASAWeatherData(
-        selectedLocation.lat,
-        selectedLocation.lon,
-        startDate,
-        endDate,
-        "XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG"
-      );
-      
-      const data: WeatherData = {
-        timestamp: selectedDate.toISOString(),
-        ...nasaData
-      };
-      
+      const today = new Date().toISOString().split('T')[0];
+      const nasaData = await fetchNASAWeatherData(selectedLocation.lat, selectedLocation.lon, today, today);
+      const data: WeatherData = { timestamp: new Date().toISOString(), ...nasaData };
       setWeatherData(data);
-      
-      // Set weather condition from NASA data
       setWeatherCondition(nasaData.condition || 'sunny');
-      
     } catch (error) {
-      toast({
-        title: "Error",
-        description: (error as Error).message || "Failed to fetch NASA weather data. The location may not be supported.",
-        variant: "destructive",
-      });
+      setWeatherData(null);
+      toast({ title: "Error Fetching Current Weather", description: (error as Error).message, variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsCurrentWeatherLoading(false);
     }
-  }, [selectedLocation, selectedDate, toast]);
+  }, [selectedLocation, toast]);
 
-  // Auto-fetch weather data when location or date changes
-  useEffect(() => {
-    fetchWeatherData();
-  }, [fetchWeatherData]);
-
-  // Update location when auto-location is available
-  useEffect(() => {
-    if (autoLocation && !locationLoading) {
-      if (selectedLocation.lat !== autoLocation.lat || selectedLocation.lon !== autoLocation.lon) {
-        setSelectedLocation({
-          lat: autoLocation.lat,
-          lon: autoLocation.lon,
-          name: autoLocation.name
-        });
-        
-        toast({
-          title: "Location detected",
-          description: `Using ${autoLocation.source === 'gps' ? 'GPS' : 'IP'} location: ${autoLocation.name}`,
-        });
-      }
+  const fetchHistoricalWeatherData = useCallback(async () => {
+    setIsHistoricalLoading(true);
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(endDate.getFullYear() - 1);
+      const historical = await fetchNASAHistoricalData(
+        selectedLocation.lat, 
+        selectedLocation.lon, 
+        startDate.toISOString().split('T')[0],
+        endDate.toISOString().split('T')[0]
+      );
+      setHistoricalData(historical);
+    } catch (error) {
+      setHistoricalData([]);
+      toast({ title: "Error Fetching Historical Data", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setIsHistoricalLoading(false);
     }
-  }, [autoLocation, locationLoading, selectedLocation.lat, selectedLocation.lon, toast]);
+  }, [selectedLocation, toast]);
+
+  useEffect(() => {
+    fetchCurrentWeatherData();
+    fetchHistoricalWeatherData();
+  }, [fetchCurrentWeatherData, fetchHistoricalWeatherData]);
 
   const handleLocationSelect = useCallback((location: WeatherLocation) => {
     setSelectedLocation(location);
-    // Don't call updateLocation to avoid loops
-    toast({
-      title: "Location updated",
-      description: `Now showing weather for ${location.name}`,
-    });
+    toast({ title: "Location Updated", description: `Fetching new weather data...` });
   }, [toast]);
 
-  // Create widgets for responsive layout - AI Summary is now second
   const widgets = [
-    {
-      id: 'weather-likelihood',
-      title: 'Weather Likelihood',
-      component: (
-        <WeatherLikelihood 
-          location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
-        />
-      ),
-      priority: 10,
-      minHeight: 300,
-    },
-    {
-      id: 'ai-summary',
-      title: 'AI Weather Analysis',
-      component: (
-        <AISummaryCard 
-          location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
-        />
-      ),
-      priority: 9,
-      minHeight: 200,
-    },
-    {
-      id: 'weather-chart',
-      title: 'Weather Trends',
-      component: <TimeSeriesChart data={weatherData ? [weatherData] : []} selectedVars={["temperature", "precipitation"]} isLoading={isLoading} />,
-      priority: 8,
-      minHeight: 400,
-    },
-    {
-      id: 'weather-map',
-      title: 'Interactive Map',
-      component: (
-        <InteractiveWeatherMap 
-          location={selectedLocation}
-          onLocationSelect={handleLocationSelect}
-        />
-      ),
-      priority: 7,
-      minHeight: 400,
-    },
+    { id: 'weather-likelihood', title: 'Weather Likelihood', component: <WeatherLikelihood location={selectedLocation} weatherData={weatherData ? [weatherData] : []} isLoading={isCurrentWeatherLoading} />, priority: 10, minHeight: 300 },
+    { id: 'weather-chart', title: 'Weather Trends (1 Year)', component: <TimeSeriesChart data={historicalData} isLoading={isHistoricalLoading} />, priority: 8, minHeight: 400 },
+    { id: 'weather-map', title: 'Interactive Map', component: <InteractiveWeatherMap location={selectedLocation} onLocationSelect={handleLocationSelect} />, priority: 7, minHeight: 400 },
   ];
 
   return (
     <div className="min-h-screen relative overflow-hidden">
       <AnimatedBackground />
-      
-      {/* Header */}
-      <motion.header 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
-      >
-        <motion.div 
-          className="flex items-center gap-3"
-          whileHover={{ scale: 1.02 }}
-        >
-          <img 
-            src={logo} 
-            alt="EcoForecast Logo" 
-            className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
-          />
+      <header className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="EcoForecast Logo" className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30" />
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
             <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
           </div>
-        </motion.div>
-        
+        </div>
         <ThemeToggle />
-      </motion.header>
+      </header>
 
-      {/* Main Content */}
       <main className="relative z-10 p-4 md:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Minimal Weather Menu */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <MinimalWeatherMenu
-              location={selectedLocation}
-              temperature={weatherData?.temperature ?? 0}
-              condition={weatherCondition}
-              isLoading={isLoading}
-            />
-          </motion.div>
-
-          {/* Responsive Widget Layout */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <ResponsiveLayout widgets={widgets} />
-          </motion.div>
-
-          {/* Data Export at Bottom */}
-          {weatherData && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex justify-center"
-            >
-              <DataExport 
-                weatherData={[weatherData]}
-                location={selectedLocation}
-                dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
-              />
-            </motion.div>
-          )}
+          <MinimalWeatherMenu location={selectedLocation} temperature={weatherData?.temperature ?? 0} condition={weatherCondition} isLoading={isCurrentWeatherLoading} />
+          <ResponsiveLayout widgets={widgets} />
+          {weatherData && <DataExport weatherData={[weatherData]} location={selectedLocation} dateRange={{ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] }} />}
         </div>
       </main>
 
-      {/* Floating Chat Input */}
-      <FloatingChatInput 
-        weatherData={weatherData}
-        location={selectedLocation.name}
-      />
+      <WeatherChatbot weatherData={weatherData} historicalData={historicalData} location={selectedLocation.name} />
 
-      {/* Loading overlay */}
       <AnimatePresence>
-        {(isLoading || locationLoading) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
-          >
-            <motion.div className="text-center">
+        {(isCurrentWeatherLoading || isHistoricalLoading) && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-background/90 flex items-center justify-center z-50">
+            <div className="text-center">
               <PlanetLoader />
               <p className="text-sm text-primary mt-4 font-medium">
-                {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
+                {isCurrentWeatherLoading ? 'Loading current weather...' : 'Loading historical data...'}
               </p>
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
