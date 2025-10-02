@@ -50,16 +50,6 @@ export const fetchNASAWeatherData = async (
     };
   } catch (error) {
     console.error('Error fetching NASA weather data:', error);
-    // Return fallback data
-    return {
-      temperature: 20,
-      precipitation: 0,
-      humidity: 60,
-      windSpeed: 5,
-      pressure: 101.3,
-      visibility: 10,
-      uvIndex: 5,
-      condition: 'sunny'
-    };
+    throw error instanceof Error ? error : new Error('Unknown weather fetch error');
   }
 };

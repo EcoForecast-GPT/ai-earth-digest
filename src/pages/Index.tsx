@@ -243,7 +243,7 @@ const Index = () => {
           >
             <MinimalWeatherMenu
               location={selectedLocation}
-              temperature={weatherData?.temperature || 20}
+              temperature={weatherData?.temperature}
               condition={weatherCondition}
               isLoading={isLoading}
             />
