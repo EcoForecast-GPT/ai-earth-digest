@@ -58,6 +58,7 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(false);
+  const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
 
   // Fetch single-point weather data
   const fetchWeatherData = useCallback(async () => {
@@ -125,6 +126,7 @@ const Index = () => {
       if (!selectedLocation) return;
 
       setIsTimeSeriesLoading(true);
+      setTimeSeriesError(null);
       try {
         const endDate = selectedDate;
         const startDate = new Date(endDate);
@@ -138,11 +140,13 @@ const Index = () => {
         });
         setTimeSeriesData(data);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({
           title: "Error fetching time-series data",
           description: "Could not load data for the trends chart.",
           variant: "destructive",
         });
+        setTimeSeriesError(errorMessage);
         setTimeSeriesData([]); // Clear data on error
       } finally {
         setIsTimeSeriesLoading(false);
@@ -236,11 +240,16 @@ const Index = () => {
 
   const otherWidgets = [
     {
-      id: 'weather-chart',
-      title: 'Weather Trends',
-      component: <TimeSeriesChart data={timeSeriesData} selectedVars={["temperature", "precipitation"]} isLoading={isTimeSeriesLoading} />,
-      priority: 8,
-      minHeight: 400,
+      id: 'weather-trends',
+      title: 'Weather Trends (Last 7 Days)',
+      component: (
+        <TimeSeriesChart 
+          data={timeSeriesData} 
+          isLoading={isTimeSeriesLoading}
+          error={timeSeriesError}
+          selectedVars={['temperature', 'precipitation']}
+        />
+      )
     },
   ];
 

@@ -24,12 +24,14 @@ interface TimeSeriesChartProps {
   data: TimeSeriesDataPoint[];
   selectedVars: string[];
   isLoading: boolean;
+  error: string | null;
 }
 
 const TimeSeriesChart = ({
   data,
   selectedVars,
   isLoading,
+  error,
 }: TimeSeriesChartProps) => {
   const getVariableColor = (variable: string) => {
     const colors: { [key: string]: string } = {
@@ -64,6 +66,22 @@ const TimeSeriesChart = ({
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[350px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Weather Trends</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[350px] flex flex-col items-center justify-center text-center text-red-400">
+            <p className="font-semibold mb-2">Failed to load chart data.</p>
+            <p className="text-xs text-muted-foreground font-mono bg-destructive/10 p-2 rounded">{error}</p>
+          </div>
         </CardContent>
       </Card>
     );

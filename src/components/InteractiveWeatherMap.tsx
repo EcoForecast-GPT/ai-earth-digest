@@ -25,6 +25,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [activeLayer, setActiveLayer] = useState('MODIS_Terra_CorrectedReflectance_TrueColor');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
@@ -42,6 +43,12 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {
       try {
+        if (!MAPTILER_API_KEY) {
+          setMapError("Configuration Error: MapTiler API key is missing. Please check your environment variables.");
+          setIsLoaded(true);
+          return;
+        }
+
         // Add CSS
         const link = document.createElement('link');
         link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
@@ -52,9 +59,14 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         const script = document.createElement('script');
         script.src = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
         script.onload = initializeMap;
+        script.onerror = () => {
+            setMapError("Failed to load the map library. Please check your network connection or ad blocker settings.");
+            setIsLoaded(true);
+        };
         document.head.appendChild(script);
       } catch (error) {
         console.error('Failed to load MapLibre:', error);
+        setMapError(`An unexpected error occurred while loading the map. Details: ${error instanceof Error ? error.message : String(error)}`);
         setIsLoaded(true); // Show fallback
       }
     };
@@ -65,6 +77,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         const maplibregl = window.maplibregl;
         
         if (!maplibregl) {
+          setMapError("Map library did not initialize correctly.");
           setIsLoaded(true);
           return;
         }
@@ -75,6 +88,10 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
           center: [location.lon, location.lat],
           zoom: 4,
           antialias: true,
+        });
+
+        map.current.on('error', (e: any) => {
+            setMapError(`Map Error: ${e.error?.message || 'An unknown map error occurred.'}`);
         });
 
         map.current.on('load', () => {
@@ -90,6 +107,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
 
       } catch (error) {
         console.error('Map initialization failed:', error);
+        setMapError(`Map initialization failed. Details: ${error instanceof Error ? error.message : String(error)}`);
         setIsLoaded(true);
       }
     };
@@ -191,7 +209,26 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
   };
 
   // Fallback UI if map fails to load
-  if (!isLoaded && map.current === null) {
+  if (mapError) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="h-full glass-card rounded-lg p-6 flex flex-col items-center justify-center text-center"
+        >
+            <div className="text-red-400 mb-4">
+                <Map size={48} />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Map Unavailable</h3>
+            <p className="text-gray-400 text-sm mb-4">The interactive map could not be loaded.</p>
+            <div className="bg-red-900/20 border border-red-500/30 rounded-md p-3 text-left text-xs text-red-300">
+                <p className="font-mono">{mapError}</p>
+            </div>
+        </motion.div>
+    );
+  }
+
+  if (!isLoaded) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
