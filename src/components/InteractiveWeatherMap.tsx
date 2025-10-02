@@ -96,6 +96,13 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         });
 
         map.current.on('error', (e: any) => {
+            // Ignore tile 4xx/5xx fetch errors (they are expected for missing GIBS tiles).
+            // Only set a fatal map error for unexpected runtime failures.
+            const status = e?.error?.status;
+            if (status && (status >= 400 && status < 600)) {
+              console.warn('Non-fatal tile error:', e.error?.message || e);
+              return;
+            }
             setMapError(`Map Error: ${e.error?.message || 'An unknown map error occurred.'}`);
         });
 

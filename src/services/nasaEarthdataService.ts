@@ -55,13 +55,22 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const body = await response.json();
+      try {
+        // Expose the last proxy response for runtime debugging (only in browser)
+        if (typeof window !== 'undefined') (window as any).__LAST_PROXY_RESPONSE = body;
+      } catch (e) {
+        // ignore
+      }
+      console.debug('Proxy JSON response:', body);
       if (body.fallback) {
         // Convert synthetic fallback series into chart shape
         return body.series.map((s: any) => ({ time: s.timestamp, temperature: s.tempK - 273.15, precipitation: s.precipMm ?? s.precipitation ?? 0 }));
       }
       // If the function returned JSON for other reasons, try to extract a series field
       if (Array.isArray(body.series)) {
-        return body.series.map((s: any) => ({ time: s.timestamp || s.time, temperature: (s.tempK ? s.tempK - 273.15 : s.temperature), precipitation: s.precipitation ?? 0 }));
+        const parsed = body.series.map((s: any) => ({ time: s.timestamp || s.time, temperature: (s.tempK ? s.tempK - 273.15 : s.temperature), precipitation: s.precipitation ?? 0 }));
+        try { if (typeof window !== 'undefined') (window as any).__LAST_PARSED_SERIES = parsed; } catch (e) {}
+        return parsed;
       }
       throw new Error('Unexpected JSON response from proxy.');
     }
@@ -73,7 +82,7 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
     const lines = rawText.trim().split('\n');
     const dataLines = lines.filter(line => !line.startsWith('#') && !line.startsWith('Date'));
 
-    const parsedData = dataLines.map(line => {
+  const parsedData = dataLines.map(line => {
       const tokens = line.split(/\s+/);
       const timestamp = tokens[0];
       const tempStr = tokens[1];
@@ -108,6 +117,8 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
         parsedData[i].precipitation = Math.round((base + spike) * 10) / 10;
       }
     }
+
+    try { if (typeof window !== 'undefined') (window as any).__LAST_PARSED_SERIES = parsedData; } catch (e) {}
 
     return parsedData;
 

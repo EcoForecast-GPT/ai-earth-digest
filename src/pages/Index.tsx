@@ -17,6 +17,7 @@ import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import DebugPanel from "@/components/DebugPanel";
 
 export interface WeatherLocation {
   lat: number;
@@ -59,6 +60,7 @@ const Index = () => {
   const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(false);
   const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Fetch single-point weather data
   const fetchWeatherData = useCallback(async () => {
@@ -306,6 +308,12 @@ const Index = () => {
           >
             {aiSummaryWidget.component}
           </motion.div>
+
+          <div className="flex justify-end mb-2">
+            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
+          </div>
+
+          {showDebug && <DebugPanel />}
 
           {/* Responsive Widget Layout */}
           <motion.div
