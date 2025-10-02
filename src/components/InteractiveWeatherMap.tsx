@@ -124,23 +124,38 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       let tileUrl = getGibsTileUrl(activeLayer, formattedDate);
 
       // Preflight a sample tile to ensure the layer/date combo exists and returns 2xx.
-      const sampleTileUrl = tileUrl.replace('{z}/{y}/{x}', '0/0/0');
-      try {
-        const res = await fetch(sampleTileUrl, { method: 'HEAD' });
-        if (!res.ok) {
-          // If the requested layer/date is not available, fallback to TrueColor
-          console.warn(`GIBS tile preflight failed for ${activeLayer} ${formattedDate}: ${res.status}`);
-          if (activeLayer !== 'MODIS_Terra_CorrectedReflectance_TrueColor') {
-            const fallbackLayer = 'MODIS_Terra_CorrectedReflectance_TrueColor';
-            tileUrl = getGibsTileUrl(fallbackLayer, formattedDate);
-          } else {
-            setMapError(`GIBS tiles not available for ${activeLayer} on ${formattedDate}.`);
-            return;
+      // If not available, try a few recent fallback dates (today, -1, -2, -7) before giving up.
+      const sampleTileUrlForDate = (d: string) => tileUrl.replace(format(currentDate, 'yyyy-MM-dd'), d).replace('{z}/{y}/{x}', '0/0/0');
+      const datesToTry = [format(currentDate, 'yyyy-MM-dd')];
+      const tmp = new Date(currentDate);
+      tmp.setDate(tmp.getDate() - 1); datesToTry.push(format(tmp, 'yyyy-MM-dd'));
+      tmp.setDate(tmp.getDate() - 1); datesToTry.push(format(tmp, 'yyyy-MM-dd'));
+      tmp.setDate(tmp.getDate() - 5); datesToTry.push(format(tmp, 'yyyy-MM-dd'));
+
+      let found = false;
+      for (const d of datesToTry) {
+        const tryUrl = tileUrl.replace(format(currentDate, 'yyyy-MM-dd'), d);
+        const sample = tryUrl.replace('{z}/{y}/{x}', '0/0/0');
+        try {
+          const res = await fetch(sample, { method: 'HEAD' });
+          if (res.ok) {
+            found = true;
+            tileUrl = tryUrl; // use the working date
+            break;
           }
+        } catch (err) {
+          console.warn('GIBS preflight network error for', sample, err);
         }
-      } catch (err: any) {
-        console.warn('GIBS tile preflight fetch error:', err);
-        // On network error, continue and let maplibre handle tile fetch/retry
+      }
+
+      if (!found) {
+        console.warn(`GIBS tile preflight failed for ${activeLayer} around ${format(currentDate,'yyyy-MM-dd')}. Falling back to TrueColor.`);
+        if (activeLayer !== 'MODIS_Terra_CorrectedReflectance_TrueColor') {
+          tileUrl = getGibsTileUrl('MODIS_Terra_CorrectedReflectance_TrueColor', format(currentDate, 'yyyy-MM-dd'));
+        } else {
+          setMapError(`GIBS tiles not available for ${activeLayer} around ${format(currentDate,'yyyy-MM-dd')}.`);
+          return;
+        }
       }
 
       if (map.current.getLayer('weather-layer')) {
