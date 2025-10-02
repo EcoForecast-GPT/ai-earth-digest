@@ -27,14 +27,8 @@ serve(async (req: Request) => {
       throw new Error('Missing required parameters');
     }
 
-    // Format the NASA NLDAS URL correctly with proper variable specification
-    const nasaUrl = new URL('https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi');
-    nasaUrl.searchParams.append('variable', 'NLDAS_FORA0125_H.002[0:23][0][0]');
-    nasaUrl.searchParams.append('location', `GEOM:POINT(${lon}, ${lat})`);
-    nasaUrl.searchParams.append('startDate', `${startDate}T00:00:00`);
-    nasaUrl.searchParams.append('endDate', `${endDate}T23:59:59`);
-    nasaUrl.searchParams.append('type', 'asc2');
-    nasaUrl.searchParams.append('portals', 'GIOVANNI');
+    // Revert to original NASA NLDAS URL and variable format
+    const nasaUrl = `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=NLDAS_FORA0125_H_002:Tair_f_inst&location=GEOM:POINT(${lon},${lat})&startDate=${startDate}T00:00:00&endDate=${endDate}T23:59:59&type=asc2`;
 
     // Retry logic for NASA API
     let response: Response | undefined;
@@ -46,7 +40,7 @@ serve(async (req: Request) => {
         console.log(`Attempt ${4-retries}: Fetching NASA API...`);
         
         response = await Promise.race([
-          fetch(nasaUrl.toString(), {
+          fetch(nasaUrl),
             headers: {
               'Accept': 'text/plain,application/json',
               'User-Agent': 'Mozilla/5.0 (compatible; WeatherApp/1.0;)'
@@ -66,7 +60,9 @@ serve(async (req: Request) => {
           }
           
           console.log('NASA API request successful');
-          return new Response(JSON.stringify({ data: text }), {
+        const data = await response.text();
+        console.log('NASA API request successful');
+        return new Response(JSON.stringify({ data }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
