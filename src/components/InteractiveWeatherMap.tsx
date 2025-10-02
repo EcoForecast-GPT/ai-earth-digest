@@ -118,10 +118,30 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       }
     };
 
-    const addWeatherLayer = () => {
+    const addWeatherLayer = async () => {
       if (!map.current) return;
       const formattedDate = format(currentDate, 'yyyy-MM-dd');
-      const tileUrl = getGibsTileUrl(activeLayer, formattedDate);
+      let tileUrl = getGibsTileUrl(activeLayer, formattedDate);
+
+      // Preflight a sample tile to ensure the layer/date combo exists and returns 2xx.
+      const sampleTileUrl = tileUrl.replace('{z}/{y}/{x}', '0/0/0');
+      try {
+        const res = await fetch(sampleTileUrl, { method: 'HEAD' });
+        if (!res.ok) {
+          // If the requested layer/date is not available, fallback to TrueColor
+          console.warn(`GIBS tile preflight failed for ${activeLayer} ${formattedDate}: ${res.status}`);
+          if (activeLayer !== 'MODIS_Terra_CorrectedReflectance_TrueColor') {
+            const fallbackLayer = 'MODIS_Terra_CorrectedReflectance_TrueColor';
+            tileUrl = getGibsTileUrl(fallbackLayer, formattedDate);
+          } else {
+            setMapError(`GIBS tiles not available for ${activeLayer} on ${formattedDate}.`);
+            return;
+          }
+        }
+      } catch (err: any) {
+        console.warn('GIBS tile preflight fetch error:', err);
+        // On network error, continue and let maplibre handle tile fetch/retry
+      }
 
       if (map.current.getLayer('weather-layer')) {
         map.current.removeLayer('weather-layer');
