@@ -225,17 +225,7 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="fixed bottom-6 left-0 right-0 w-full max-w-md mx-auto px-4 z-50"
       >
-        <motion.div
-          animate={{ 
-            y: [0, -5, 0],
-          }}
-          transition={{
-            duration: 4,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-          className="glass-panel rounded-full shadow-2xl border border-primary/30 overflow-hidden backdrop-blur-xl hover:border-primary/50 transition-all duration-300"
-        >
+        <div className="glass-panel rounded-full shadow-2xl border border-primary/30 overflow-hidden backdrop-blur-xl hover:border-primary/50 transition-all duration-300">
           <div className="flex items-center gap-2 p-2">
             <Input
               value={input}
@@ -254,7 +244,7 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
               <Send className="w-4 h-4" />
             </Button>
           </div>
-        </motion.div>
+        </div>
       </motion.div>
     </>
   );
