@@ -38,11 +38,18 @@ export const fetchNASAWeatherData = async (
     });
 
     if (!response.ok) {
-      throw new Error(`Weather API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Weather API error:', response.status, errorText);
+      throw new Error(`Weather API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     
+    if (data.error) {
+      console.error('Weather API returned error:', data.error, data);
+      throw new Error(`Weather API returned error: ${data.error}`);
+    }
+
     console.log('Weather data received:', data);
     
     return {
