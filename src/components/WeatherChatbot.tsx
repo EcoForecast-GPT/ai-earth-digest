@@ -146,8 +146,18 @@ export const WeatherChatbot = ({ weatherData, location }: WeatherChatbotProps) =
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-6 right-6 w-96 h-[32rem] glass-card rounded-xl border border-border/50 backdrop-blur-xl z-50 flex flex-col overflow-hidden"
+      animate={{ 
+        opacity: 1,
+        y: [0, -8, 0],
+        transition: {
+          y: {
+            duration: 3,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }
+        }
+      }}
+      className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[85vw] md:w-[400px] lg:w-[450px] h-[40vh] md:h-[32rem] glass-card rounded-xl border border-border/50 backdrop-blur-xl z-50 flex flex-col overflow-hidden mx-auto shadow-lg hover:shadow-xl transition-shadow"
     >
       {/* Header */}
       <div className="p-4 border-b border-border/30 bg-gradient-to-r from-primary/10 to-accent/10">
