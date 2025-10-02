@@ -12,8 +12,8 @@ import DataExport from "./DataExport";
 interface WeatherControlsProps {
   location: WeatherLocation;
   onLocationChange: (location: WeatherLocation) => void;
-  dateTime: string;
-  onDateTimeChange: (datetime: string) => void;
+  date: string;
+  onDateChange: (date: string) => void;
   isLoading: boolean;
   onFetch: () => void;
   weatherData: any[];
@@ -30,15 +30,14 @@ const presetLocations: WeatherLocation[] = [
 const WeatherControls = ({
   location,
   onLocationChange,
-  dateTime,
-  onDateTimeChange,
+  date,
+  onDateChange,
   isLoading,
   onFetch,
   weatherData
 }: WeatherControlsProps) => {
   const [customLocation, setCustomLocation] = useState("");
-  const [date, setDate] = useState(dateTime.split('T')[0]);
-  const [time, setTime] = useState(dateTime.split('T')[1] || "12:00");
+  const [localDate, setLocalDate] = useState(date);
   const { 
     location: detectedLocation, 
     loading: locationLoading, 
@@ -51,6 +50,10 @@ const WeatherControls = ({
       onLocationChange(detectedLocation);
     }
   }, [detectedLocation, onLocationChange]);
+
+  useEffect(() => {
+    setLocalDate(date);
+  }, [date]);
 
   const handleCustomLocationSubmit = () => {
     const parts = customLocation.split(',').map(part => part.trim());
@@ -183,35 +186,20 @@ const WeatherControls = ({
       <motion.div className="space-y-4">
         <Label className="text-foreground flex items-center gap-2">
           <Calendar className="w-4 h-4 text-accent" />
-          Date & Time
+          Date
         </Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="date" className="text-sm text-muted-foreground">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                onDateTimeChange(`${e.target.value}T${time}`);
-              }}
-              className="glass-panel border-white/10 focus:border-accent/50"
-            />
-          </div>
-          <div>
-            <Label htmlFor="time" className="text-sm text-muted-foreground">Time</Label>
-            <Input
-              id="time"
-              type="time"
-              value={time}
-              onChange={(e) => {
-                setTime(e.target.value);
-                onDateTimeChange(`${date}T${e.target.value}`);
-              }}
-              className="glass-panel border-white/10 focus:border-accent/50"
-            />
-          </div>
+        <div>
+          <Label htmlFor="date" className="text-sm text-muted-foreground">Date</Label>
+          <Input
+            id="date"
+            type="date"
+            value={localDate}
+            onChange={(e) => {
+              setLocalDate(e.target.value);
+              onDateChange(e.target.value);
+            }}
+            className="glass-panel border-white/10 focus:border-accent/50"
+          />
         </div>
       </motion.div>
 

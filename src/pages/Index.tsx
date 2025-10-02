@@ -54,7 +54,7 @@ const Index = () => {
     lon: 55.296249,
     name: "Dubai, UAE"
   });
-  const [selectedDateTime, setSelectedDateTime] = useState<string>(new Date().toISOString());
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,31 +63,23 @@ const Index = () => {
   const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
-  const handleDateTimeChange = (datetime: string) => {
-    setSelectedDateTime(datetime);
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
   };
 
   // Fetch single-point weather data
   const fetchWeatherData = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Only use NASA data for the selected date (future or past)
       const nasaData = await fetchNASAWeatherData(
         selectedLocation.lat,
         selectedLocation.lon,
-        selectedDateTime
+        selectedDate
       );
-      
-      // Generate time series data based on NASA data
-      const timeSeries = Array.from({ length: 24 }, (_, hour) => ({
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        temperature: nasaData.temperature + Math.sin(hour / 4) * 5,
-        precipitation: nasaData.precipitation * (Math.random() * 0.5 + 0.5),
-        windSpeed: nasaData.windSpeed + Math.random() * 3,
-        humidity: nasaData.humidity + Math.random() * 10 - 5,
-      }));
 
       const data: WeatherData = {
-        timestamp: selectedDateTime,
+        timestamp: selectedDate,
         temperature: nasaData.temperature,
         precipitation: nasaData.precipitation,
         humidity: nasaData.humidity,
@@ -95,11 +87,11 @@ const Index = () => {
         pressure: nasaData.pressure,
         visibility: nasaData.visibility,
         uvIndex: nasaData.uvIndex,
-        timeSeries
+        timeSeries: []
       };
-      
+
       setWeatherData(data);
-      
+
       // Set weather condition from NASA data
       const conditionMap: { [key: string]: WeatherCondition } = {
         'very sunny': 'sunny',
@@ -111,7 +103,7 @@ const Index = () => {
         'stormy': 'stormy'
       };
       setWeatherCondition(conditionMap[nasaData.condition] || 'sunny');
-      
+
     } catch (error) {
       toast({
         title: "Error",
@@ -121,7 +113,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLocation, selectedDateTime, toast]);
+  }, [selectedLocation, selectedDate, toast]);
 
   // Fetch time-series data for the chart
   useEffect(() => {
@@ -131,7 +123,7 @@ const Index = () => {
       setIsTimeSeriesLoading(true);
       setTimeSeriesError(null);
       try {
-        const endDate = new Date(selectedDateTime);
+        const endDate = new Date(selectedDate);
         const startDate = new Date(endDate);
         startDate.setDate(endDate.getDate() - 7); // Fetch last 7 days
 
@@ -158,12 +150,12 @@ const Index = () => {
     };
 
     fetchChartData();
-  }, [selectedLocation, selectedDateTime, toast]);
+  }, [selectedLocation, selectedDate, toast]);
 
   // Auto-fetch weather data when location or date changes
   useEffect(() => {
     fetchWeatherData();
-  }, [selectedLocation, selectedDateTime, fetchWeatherData]);
+  }, [selectedLocation, selectedDate, fetchWeatherData]);
 
   // Update location when auto-location is available - only once per location change
   useEffect(() => {
@@ -238,8 +230,8 @@ const Index = () => {
       <WeatherControls
         location={selectedLocation}
         onLocationChange={handleLocationSelect}
-        dateTime={selectedDateTime}
-        onDateTimeChange={handleDateTimeChange}
+        date={selectedDate}
+        onDateChange={handleDateChange}
         isLoading={isLoading}
         onFetch={fetchWeatherData}
         weatherData={weatherData ? [weatherData] : []}
@@ -357,7 +349,7 @@ const Index = () => {
               <DataExport 
                 weatherData={[weatherData]}
                 location={selectedLocation}
-                dateRange={{ start: selectedDateTime.split('T')[0], end: selectedDateTime.split('T')[0] }}
+                dateRange={{ start: selectedDate, end: selectedDate }}
               />
             </motion.div>
           )}
