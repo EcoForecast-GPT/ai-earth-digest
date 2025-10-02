@@ -139,7 +139,7 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-2xl mx-auto px-4 z-50"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md mx-auto px-4 z-50"
           >
             <div className="glass-panel rounded-3xl shadow-2xl border border-primary/20 overflow-hidden backdrop-blur-xl">
               {/* Header */}
@@ -221,9 +221,18 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
       {/* Floating Input */}
       <motion.div
         initial={{ opacity: 0, y: 100 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl mx-auto px-4 z-50"
+        animate={{ 
+          opacity: 1, 
+          y: 0,
+          transition: {
+            y: {
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }
+          }
+        }}
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md mx-auto px-4 z-50"
       >
         <div className="glass-panel rounded-full shadow-2xl border border-primary/30 overflow-hidden backdrop-blur-xl hover:border-primary/50 transition-all duration-300">
           <div className="flex items-center gap-2 p-2">
