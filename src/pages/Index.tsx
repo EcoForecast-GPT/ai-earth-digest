@@ -83,7 +83,76 @@ const Index = () => {
   };
 
   // Fetch single-point weather data
+
   const fetchWeatherData = useCallback(async () => {
+    // Check if selectedDate is in the future (up to 3 years)
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const selDate = new Date(selectedDate);
+    selDate.setHours(0,0,0,0);
+    const msInDay = 24*60*60*1000;
+    const maxFuture = new Date(today.getTime() + 3*365*msInDay);
+    if (selDate > today && selDate <= maxFuture) {
+      // If we don't have a full year of data, fetch it first
+      const oneYearAgo = new Date(selDate);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const yearStart = oneYearAgo.toISOString().split('T')[0];
+      const yearEnd = today.toISOString().split('T')[0];
+      let yearData = timeSeriesData;
+      if (!yearData || yearData.length < 300) {
+        try {
+          setIsLoading(true);
+          yearData = await fetchTimeSeriesData({
+            lat: selectedLocation.lat,
+            lon: selectedLocation.lon,
+            startDate: yearStart,
+            endDate: yearEnd,
+          });
+          setTimeSeriesData(yearData);
+        } catch (e) {
+          setWeatherData(null);
+          setWeatherCondition('sunny');
+          setIsLoading(false);
+          return;
+        }
+      }
+      // Predict using seasonal pattern: find the closest day-of-year in past year
+      const targetDay = selDate.getMonth() * 31 + selDate.getDate();
+      // Find all past points within +/- 7 days of year
+      const candidates = yearData.filter(d => {
+        const dDate = new Date(d.time);
+        const dDay = dDate.getMonth() * 31 + dDate.getDate();
+        return Math.abs(dDay - targetDay) <= 7;
+      });
+      // If not enough, fallback to all data
+      const useData = candidates.length > 5 ? candidates : yearData;
+      const avg = (arr, key) => arr.reduce((sum, d) => sum + (d[key] ?? 0), 0) / arr.length;
+      const temperature = avg(useData, 'temperature');
+      const precipitation = avg(useData, 'precipitation');
+      const humidity = avg(useData, 'humidity');
+      const windSpeed = avg(useData, 'windSpeed');
+      // Guess condition based on precipitation/temperature
+      let predCondition = 'sunny';
+      if (precipitation > 5) predCondition = 'rainy';
+      else if (precipitation > 1) predCondition = 'cloudy';
+      else if (temperature > 32) predCondition = 'sunny';
+      else if (temperature < 5) predCondition = 'cloudy';
+      const predicted: WeatherData = {
+        timestamp: selectedDate,
+        temperature,
+        precipitation,
+        humidity,
+        windSpeed,
+        pressure: 1013,
+        visibility: 10,
+        uvIndex: 6,
+        timeSeries: [],
+      };
+      setWeatherData(predicted);
+      setWeatherCondition(predCondition as WeatherCondition);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       // Only use NASA data for the selected date (future or past)
@@ -128,7 +197,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLocation, selectedDate, toast]);
+  }, [selectedLocation, selectedDate, toast, timeSeriesData]);
 
 
   // Fetch time-series data for the chart (NASA trends)
