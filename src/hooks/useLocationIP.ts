@@ -125,11 +125,11 @@ export const useLocationIP = () => {
         return;
       }
 
-      // Priority 3: Default location (New York)
+      // Priority 3: Default location (Dubai)
       setLocation({
-        lat: 40.7128,
-        lon: -74.0060,
-        name: 'New York, NY',
+        lat: 25.276987,
+        lon: 55.296249,
+        name: 'Dubai, UAE',
         source: 'manual'
       });
       
@@ -137,9 +137,9 @@ export const useLocationIP = () => {
       setError('Failed to get location');
       // Still set a default location
       setLocation({
-        lat: 40.7128,
-        lon: -74.0060,
-        name: 'New York, NY',
+        lat: 25.276987,
+        lon: 55.296249,
+        name: 'Dubai, UAE',
         source: 'manual'
       });
     } finally {

@@ -22,11 +22,10 @@ export interface NASAWeatherData {
 export const fetchNASAWeatherData = async (
   lat: number,
   lon: number,
-  startDate: string,
-  endDate: string
+  date?: string
 ): Promise<NASAWeatherData> => {
   try {
-    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}`);
+    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
     
     const response = await fetch(WEATHER_FUNCTION_URL, {
       method: 'POST',
@@ -35,7 +34,7 @@ export const fetchNASAWeatherData = async (
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'apikey': SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ lat, lon })
+      body: JSON.stringify({ lat, lon, date })
     });
 
     if (!response.ok) {
