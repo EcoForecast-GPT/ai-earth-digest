@@ -13,26 +13,14 @@ interface WeatherData {
   pressure: number;
   visibility: number;
   uvIndex: number;
-  condition: 'very sunny' | 'sunny' | 'partly cloudy' | 'cloudy' | 'very cloudy' | 'rainy' | 'stormy' | 'foggy' | 'humid';
+  condition: 'very sunny' | 'sunny' | 'partly cloudy' | 'cloudy' | 'very cloudy' | 'rainy' | 'stormy';
 }
 
-const codeToCondition = (code: number, lat: number, lon: number, date?: Date): WeatherData['condition'] => {
-  // Dubai coordinates
-  const isDubai = lat > 24 && lat < 26 && lon > 54 && lon < 56;
-  const isSummer = date ? (date.getMonth() + 1 >= 5 && date.getMonth() + 1 <= 9) : false;
-
-  // Never predict rain for Dubai in summer
-  if (isDubai && isSummer) {
-    if (code >= 45 && code <= 48) return 'foggy'; // fog codes
-    if (code >= 1 && code <= 3) return 'partly cloudy';
-    return 'sunny';
-  }
-
+const codeToCondition = (code: number): WeatherData['condition'] => {
   if (code >= 95 && code <= 99) return 'stormy';
   if (code >= 80 && code <= 82) return 'rainy';
   if (code >= 61 && code <= 67) return 'rainy';
   if (code >= 51 && code <= 57) return 'rainy';
-  if (code >= 45 && code <= 48) return 'foggy';
   if (code >= 3) return 'very cloudy';
   if (code === 2) return 'cloudy';
   if (code === 1) return 'partly cloudy';
@@ -90,7 +78,7 @@ serve(async (req) => {
     if (requestedDate) {
       const daily = data.daily;
       const temperature = (daily.temperature_2m_max[0] + daily.temperature_2m_min[0]) / 2;
-      const condition = codeToCondition(daily.weather_code[0], lat, lon, requestedDate);
+      const condition = codeToCondition(daily.weather_code[0]);
 
       weatherData = {
         temperature: temperature,
@@ -116,33 +104,13 @@ serve(async (req) => {
       else if (humidity > 85) visibility = 7;
 
 
-      let condition = codeToCondition(weatherCode, lat, lon);
-      
-      // Special handling for Dubai
-      const isDubai = lat > 24 && lat < 26 && lon > 54 && lon < 56;
-      const currentMonth = new Date().getMonth() + 1;
-      const isSummer = currentMonth >= 5 && currentMonth <= 9;
-
-      if (isDubai) {
-        if (isSummer) {
-          // Dubai summer: prioritize humidity/fog over rain
-          if (humidity > 85 && temperature < 30) condition = 'foggy';
-          else if (humidity > 75) condition = 'humid';
-          else if (condition === 'sunny' && daily.uv_index_max[0] > 8) condition = 'very sunny';
-        } else {
-          // Dubai non-summer: still be conservative with rain predictions
-          if (humidity > 85 && temperature < 28) condition = 'foggy';
-          else if (humidity > 75) condition = 'humid';
-          else if (condition === 'sunny' && daily.uv_index_max[0] > 8) condition = 'very sunny';
-        }
-      } else {
-        // Non-Dubai locations: normal condition handling
-        if ((condition === 'sunny' || condition === 'very sunny') && humidity > 70) {
-          condition = 'partly cloudy';
-        }
-        if (condition === 'sunny' && daily.uv_index_max[0] > 8 && temperature > 25) {
-          condition = 'very sunny';
-        }
+      let condition = codeToCondition(weatherCode);
+      // Only override to 'partly cloudy' if it's currently 'sunny' or 'very sunny', humidity is high, and not rainy/cloudy
+      if ((condition === 'sunny' || condition === 'very sunny') && humidity > 70) {
+        condition = 'partly cloudy';
+      }
+      if (condition === 'sunny' && daily.uv_index_max[0] > 8 && temperature > 25) {
+        condition = 'very sunny';
       }
 
       weatherData = {
