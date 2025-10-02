@@ -8,7 +8,7 @@ import TimeSeriesChart from "@/components/TimeSeriesChart";
 import AISummaryCard from "@/components/AISummaryCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { FloatingChatInput } from "@/components/FloatingChatInput";
-import { InteractiveWeatherMap } from "@/components/InteractiveWeatherMap";
+// ...InteractiveWeatherMap import removed
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { useLocationIP } from "@/hooks/useLocationIP";
 import { PlanetLoader } from "@/components/PlanetLoader";
@@ -215,18 +215,7 @@ const Index = () => {
     minHeight: 200,
   };
 
-  const interactiveMapWidget = {
-    id: 'interactive-map',
-    title: 'Interactive Map',
-    component: (
-      <ErrorBoundary fallback={<div className="text-red-500">Error loading map. Please check configuration.</div>}>
-        <InteractiveWeatherMap 
-          location={selectedLocation}
-          onLocationSelect={handleLocationSelect}
-        />
-      </ErrorBoundary>
-    )
-  };
+  // ...interactiveMapWidget removed
 
   const likelihoodWidget = {
     id: 'weather-likelihood',
@@ -339,7 +328,7 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <ResponsiveLayout widgets={[weatherControlsWidget, interactiveMapWidget, likelihoodWidget, ...otherWidgets]} />
+            <ResponsiveLayout widgets={[weatherControlsWidget, likelihoodWidget, ...otherWidgets]} />
           </motion.div>
 
           {/* Data Export at Bottom */}
