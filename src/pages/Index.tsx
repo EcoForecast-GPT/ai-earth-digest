@@ -162,7 +162,7 @@ const Index = () => {
     component: (
       <AISummaryCard 
         location={selectedLocation}
-        weatherData={weatherData ? [weatherData] : []}
+        weatherData={weatherData ? weatherData.timeSeries : []}
         isLoading={isLoading}
       />
     ),
@@ -175,10 +175,9 @@ const Index = () => {
       id: 'weather-likelihood',
       title: 'Weather Likelihood',
       component: (
-        <WeatherLikelihood 
-          location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
+        <WeatherLikelihood
+                  location={selectedLocation}
+                  weatherData={weatherData ? weatherData.timeSeries : []}          isLoading={isLoading}
         />
       ),
       priority: 10,
@@ -187,22 +186,11 @@ const Index = () => {
     {
       id: 'weather-chart',
       title: 'Weather Trends',
-      component: <TimeSeriesChart data={weatherData ? [weatherData] : []} selectedVars={["temperature", "precipitation"]} isLoading={isLoading} />,
+      component: <TimeSeriesChart data={weatherData ? weatherData.timeSeries : []} selectedVars={["temperature", "precipitation"]} isLoading={isLoading} />,
       priority: 8,
       minHeight: 400,
     },
-    {
-      id: 'weather-map',
-      title: 'Interactive Map',
-      component: (
-        <InteractiveWeatherMap 
-          location={selectedLocation}
-          onLocationSelect={handleLocationSelect}
-        />
-      ),
-      priority: 7,
-      minHeight: 400,
-    },
+
   ];
 
   return (
@@ -277,7 +265,7 @@ const Index = () => {
               className="flex justify-center"
             >
               <DataExport 
-                weatherData={[weatherData]}
+                weatherData={weatherData.timeSeries}
                 location={selectedLocation}
                 dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
               />
