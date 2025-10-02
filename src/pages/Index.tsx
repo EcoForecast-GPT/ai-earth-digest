@@ -15,6 +15,7 @@ import { PlanetLoader } from "@/components/PlanetLoader";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
+import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
 
 export interface WeatherLocation {
   lat: number;
@@ -54,8 +55,10 @@ const Index = () => {
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
+  const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(false);
 
-  // Fetch real NASA weather data
+  // Fetch single-point weather data
   const fetchWeatherData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -113,6 +116,39 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [selectedLocation, selectedDate, toast]);
+
+  // Fetch time-series data for the chart
+  useEffect(() => {
+    const fetchChartData = async () => {
+      if (!selectedLocation) return;
+
+      setIsTimeSeriesLoading(true);
+      try {
+        const endDate = selectedDate;
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 7); // Fetch last 7 days
+
+        const data = await fetchTimeSeriesData({
+          lat: selectedLocation.lat,
+          lon: selectedLocation.lon,
+          startDate: startDate.toISOString().split("T")[0],
+          endDate: endDate.toISOString().split("T")[0],
+        });
+        setTimeSeriesData(data);
+      } catch (error) {
+        toast({
+          title: "Error fetching time-series data",
+          description: "Could not load data for the trends chart.",
+          variant: "destructive",
+        });
+        setTimeSeriesData([]); // Clear data on error
+      } finally {
+        setIsTimeSeriesLoading(false);
+      }
+    };
+
+    fetchChartData();
   }, [selectedLocation, selectedDate, toast]);
 
   // Auto-fetch weather data when location or date changes
@@ -187,7 +223,7 @@ const Index = () => {
     {
       id: 'weather-chart',
       title: 'Weather Trends',
-      component: <TimeSeriesChart data={weatherData ? [weatherData] : []} selectedVars={["temperature", "precipitation"]} isLoading={isLoading} />,
+      component: <TimeSeriesChart data={timeSeriesData} selectedVars={["temperature", "precipitation"]} isLoading={isTimeSeriesLoading} />,
       priority: 8,
       minHeight: 400,
     },
