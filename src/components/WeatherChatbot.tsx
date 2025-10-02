@@ -1,133 +1,260 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, MessageSquare } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { motion } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { NASAWeatherData, HistoricalDataPoint } from "@/services/nasaApi";
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Message {
   id: string;
   text: string;
   isBot: boolean;
+  timestamp: Date;
 }
 
 interface WeatherChatbotProps {
-  weatherData: NASAWeatherData | null;
-  historicalData: HistoricalDataPoint[];
-  location: string;
+  weatherData?: any;
+  location?: string;
 }
 
-export const WeatherChatbot = ({ weatherData, historicalData, location }: WeatherChatbotProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+export const WeatherChatbot = ({ weatherData, location }: WeatherChatbotProps) => {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      text: `Hello! I'm your weather assistant. I can help you understand current conditions${location ? ` for ${location}` : ''} and answer weather-related questions. What would you like to know?`,
+      isBot: true,
+      timestamp: new Date(),
+    },
+  ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
     }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
   }, [messages]);
 
   const generateWeatherResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
-
-    if (message.includes('history') || message.includes('historical') || message.includes('last year')) {
-      if (!historicalData || historicalData.length === 0) {
-        return "I don't have historical data available at the moment. It might still be loading.";
+    
+    // Extract weather data if available
+    const temp = weatherData?.temperature;
+    const precip = weatherData?.precipitation;
+    const wind = weatherData?.windSpeed;
+    const humidity = weatherData?.humidity;
+    
+    if (message.includes('temperature') || message.includes('hot') || message.includes('cold')) {
+      if (temp !== undefined) {
+        const feel = temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp > 15 ? 'comfortable' : temp > 5 ? 'cool' : 'cold';
+        return `Current temperature${location ? ` in ${location}` : ''} is ${temp.toFixed(1)}°C, which feels ${feel}. ${temp > 30 ? 'Stay hydrated and seek shade during peak hours.' : temp < 5 ? 'Dress warmly and watch for frost.' : 'Good conditions for most outdoor activities.'}`;
       }
-      const validTemps = historicalData.map(d => d.temperature).filter(t => t !== null) as number[];
-      const avgTemp = validTemps.reduce((a, b) => a + b, 0) / validTemps.length;
-      const totalPrecip = historicalData.map(d => d.precipitation).filter(p => p !== null).reduce((a, b) => a + b, 0);
-      return `Over the last year in ${location}, the average temperature was ${avgTemp.toFixed(1)}°C, with a total precipitation of approximately ${totalPrecip.toFixed(1)} mm.`;
+      return `Temperature data is loading. Generally, check the hourly forecast for temperature variations throughout the day.`;
     }
-
-    if (message.includes('forecast') || message.includes('tomorrow')) {
-      return "I can only access historical and current weather data from NASA. I do not have forecasting capabilities.";
+    
+    if (message.includes('rain') || message.includes('precipitation') || message.includes('wet')) {
+      if (precip !== undefined) {
+        const rainLevel = precip > 10 ? 'heavy' : precip > 5 ? 'moderate' : precip > 1 ? 'light' : 'minimal';
+        return `Precipitation${location ? ` in ${location}` : ''} is ${precip.toFixed(1)}mm/h (${rainLevel}). ${precip > 10 ? 'Heavy rain expected - indoor activities recommended.' : precip > 5 ? 'Bring an umbrella and waterproof gear.' : 'Mostly dry conditions.'}`;
+      }
+      return `Precipitation data is loading. Check the radar and hourly forecasts for accurate timing.`;
     }
-
-    if (!weatherData) {
-      return "I'm still waiting for the latest weather data. Please ask again in a moment.";
+    
+    if (message.includes('wind') || message.includes('windy')) {
+      if (wind !== undefined) {
+        const windLevel = wind > 20 ? 'very windy' : wind > 15 ? 'windy' : wind > 10 ? 'breezy' : 'calm';
+        return `Wind speed${location ? ` in ${location}` : ''} is ${wind.toFixed(1)} km/h (${windLevel}). ${wind > 20 ? 'Strong winds may affect outdoor activities.' : wind > 15 ? 'Noticeable wind - secure loose objects.' : 'Pleasant wind conditions.'}`;
+      }
+      return `Wind data is loading. Check both speed and gusts for outdoor planning.`;
     }
-
-    if (message.includes('temperature') || message.includes('temp')) {
-      return `The current temperature in ${location} is ${weatherData.temperature.toFixed(1)}°C.`;
+    
+    if (message.includes('humidity') || message.includes('humid') || message.includes('uncomfortable')) {
+      if (humidity !== undefined) {
+        const humidLevel = humidity > 80 ? 'very humid' : humidity > 60 ? 'humid' : humidity > 40 ? 'comfortable' : 'dry';
+        return `Humidity${location ? ` in ${location}` : ''} is ${humidity.toFixed(0)}% (${humidLevel}). ${humidity > 80 ? 'Very uncomfortable - stay cool and hydrated.' : humidity > 60 ? 'Moderately humid conditions.' : 'Comfortable humidity levels.'}`;
+      }
+      return `Humidity data is loading. High humidity can make temperatures feel warmer.`;
     }
-
-    if (message.includes('rain') || message.includes('precipitation')) {
-      return `Current precipitation in ${location} is ${weatherData.precipitation.toFixed(1)} mm/hr.`;
+    
+    if (message.includes('forecast') || message.includes('tomorrow') || message.includes('week')) {
+      return `The forecast shows evolving patterns${location ? ` for ${location}` : ''}. Check the time-series chart for hourly trends. Weather can change quickly, so check back regularly for updates.`;
     }
-
-    if (message.includes('wind')) {
-      return `The wind speed in ${location} is ${weatherData.windSpeed.toFixed(1)} m/s.`;
+    
+    if (message.includes('outdoor') || message.includes('activity') || message.includes('hiking') || message.includes('sports')) {
+      let advice = 'For outdoor activities, current conditions: ';
+      const factors = [];
+      if (temp !== undefined) factors.push(`${temp.toFixed(0)}°C`);
+      if (wind !== undefined) factors.push(`${wind.toFixed(0)} km/h wind`);
+      if (precip !== undefined && precip > 1) factors.push(`${precip.toFixed(1)}mm rain`);
+      
+      return advice + (factors.length > 0 ? factors.join(', ') + '. ' : '') + 
+        'Check UV levels for sun exposure and watch for weather changes.';
     }
-
-    return `I can provide current and historical weather data for ${location}. Ask me about temperature, precipitation, wind, or history.`;
+    
+    if (message.includes('current') || message.includes('now') || message.includes('today')) {
+      if (weatherData) {
+        return `Current conditions${location ? ` in ${location}` : ''}: Temperature ${temp?.toFixed(1)}°C, Wind ${wind?.toFixed(1)} km/h, Precipitation ${precip?.toFixed(1)}mm/h, Humidity ${humidity?.toFixed(0)}%. Check the dashboard for detailed forecasts.`;
+      }
+    }
+    
+    return `I can help with weather info${location ? ` for ${location}` : ''}! Ask about temperature, rain, wind, humidity, or current conditions. What would you like to know?`;
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
-    const userMessage: Message = { id: Date.now().toString(), text: input, isBot: false };
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: input,
+      isBot: false,
+      timestamp: new Date(),
+    };
+
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
+    // Simulate AI response delay
     setTimeout(() => {
-      const response = generateWeatherResponse(input);
-      const botMessage: Message = { id: (Date.now() + 1).toString(), text: response, isBot: true };
-      setMessages(prev => [...prev, botMessage]);
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: generateWeatherResponse(input),
+        isBot: true,
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, botResponse]);
       setIsLoading(false);
-    }, 800);
+    }, 1000 + Math.random() * 1000);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <Button size="icon" className="fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-2xl glow-primary">
-            <MessageSquare className="w-8 h-8" />
-          </Button>
-        </motion.div>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] md:max-w-[600px] h-[70vh] flex flex-col p-0 glass-panel">
-        <DialogHeader className="p-4 border-b border-border/30">
-          <DialogTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" /> Weather Assistant</DialogTitle>
-        </DialogHeader>
-        <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-          <div className="space-y-4">
-            {messages.map(msg => {
-              const Icon = msg.isBot ? Bot : User;
-              return (
-                <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`flex items-start gap-2 max-w-[85%] ${msg.isBot ? '' : 'flex-row-reverse'}`}>
-                    <div className={`p-2 rounded-full border ${msg.isBot ? 'bg-card text-primary' : 'bg-primary text-primary-foreground'}`}><Icon className="w-4 h-4" /></div>
-                    <div className={`px-3 py-2 rounded-lg border ${msg.isBot ? 'bg-card' : 'bg-primary/10'}`}>
-                      <p className="text-sm leading-relaxed">{msg.text}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-            {isLoading && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-                 <div className="flex items-start gap-2 max-w-[85%]">
-                  <div className="p-2 rounded-full border bg-card text-primary"><Bot className="w-4 h-4" /></div>
-                  <div className="px-3 py-2 rounded-lg border bg-card"><Loader2 className="w-4 h-4 animate-spin" /></div>
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </ScrollArea>
-        <div className="p-4 border-t border-border/30">
-          <div className="flex gap-2">
-            <Input value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSend()} placeholder="Ask about the weather..." disabled={isLoading} />
-            <Button onClick={handleSend} disabled={!input.trim() || isLoading} size="icon"><Send className="w-4 h-4" /></Button>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed bottom-6 right-6 w-96 h-[32rem] glass-card rounded-xl border border-border/50 backdrop-blur-xl z-50 flex flex-col overflow-hidden"
+    >
+      {/* Header */}
+      <div className="p-4 border-b border-border/30 bg-gradient-to-r from-primary/10 to-accent/10">
+        <div className="flex items-center gap-3">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+            className="p-2 rounded-lg bg-primary/20 border border-primary/30"
+          >
+            <Sparkles className="w-5 h-5 text-primary" />
+          </motion.div>
+          <div>
+            <h3 className="font-semibold text-foreground">Weather Assistant</h3>
+            <p className="text-xs text-muted-foreground">AI-powered weather insights</p>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      {/* Messages */}
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+        <div className="space-y-4">
+          <AnimatePresence>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}
+              >
+                <div className={`flex items-start gap-2 max-w-[80%] ${message.isBot ? 'flex-row' : 'flex-row-reverse'}`}>
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    className={`p-2 rounded-lg border ${
+                      message.isBot 
+                        ? 'bg-primary/20 border-primary/30 text-primary' 
+                        : 'bg-accent/20 border-accent/30 text-accent'
+                    }`}
+                  >
+                    {message.isBot ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                  </motion.div>
+                  <div
+                    className={`px-3 py-2 rounded-lg ${
+                      message.isBot
+                        ? 'bg-card/60 border border-border/30 text-card-foreground'
+                        : 'bg-primary/20 border border-primary/30 text-foreground'
+                    }`}
+                  >
+                    <p className="text-sm leading-relaxed">{message.text}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex justify-start"
+            >
+              <div className="flex items-start gap-2">
+                <div className="p-2 rounded-lg bg-primary/20 border border-primary/30 text-primary">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-card/60 border border-border/30">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Input */}
+      <div className="p-4 border-t border-border/30 bg-gradient-to-r from-card/50 to-card/30">
+        <div className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask about weather conditions..."
+            className="flex-1 bg-input/50 border-border/50 focus:border-primary/50 focus:ring-primary/20"
+            disabled={isLoading}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            size="icon"
+            className="bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary hover:text-primary"
+          >
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.1 }}
+            >
+              <Send className="w-4 h-4" />
+            </motion.div>
+          </Button>
+        </div>
+      </div>
+    </motion.div>
   );
 };

@@ -77,7 +77,7 @@
 
   .light {
     /* Light Theme - Yellow/Orange Accent */
-    --background: 0 0% 100%;
+    --background: 40 40% 98%;
     --foreground: 0 0% 10%;
     --card: 40 30% 96%;
     --card-foreground: 0 0% 10%;

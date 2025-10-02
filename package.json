@@ -11,11 +11,11 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview --port 3000",
-    "start": "vite preview --port 3000"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@maptiler/sdk": "^3.8.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -46,6 +46,7 @@
     "@react-spring/web": "^10.0.3",
     "@supabase/supabase-js": "^2.58.0",
     "@tanstack/react-query": "^5.83.0",
+    "@types/mapbox-gl": "^3.4.1",
     "@types/react-virtualized": "^9.22.3",
     "chart.js": "^4.5.0",
     "class-variance-authority": "^0.7.1",
@@ -55,8 +56,9 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.22",
     "input-otp": "^1.4.2",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.462.0",
+    "mapbox-gl": "^3.15.0",
+    "maplibre-gl": "^5.7.3",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.3.0",
@@ -76,7 +78,6 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
-    "@types/leaflet": "^1.9.10",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
