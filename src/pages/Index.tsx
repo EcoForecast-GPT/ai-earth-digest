@@ -102,7 +102,7 @@ const Index = () => {
         progress = val;
         setPredictionProgress(val);
       };
-      // Timeout after 15 seconds
+      // Timeout after 50 seconds
       let didTimeout = false;
       let partialData: any[] | null = null;
       const timeoutPromise = new Promise((resolve, reject) => {
@@ -114,31 +114,31 @@ const Index = () => {
           } else {
             reject(new Error('Prediction timed out.'));
           }
-        }, 15000);
+        }, 50000);
       });
-      // Only fetch the exact year needed for the prediction
-      const oneYearAgo = new Date(selDate);
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const yearStart = oneYearAgo.toISOString().split('T')[0];
-      const yearEnd = selDate.toISOString().split('T')[0];
-      let yearData = timeSeriesData;
+  // Fetch up to 3 years of data for better accuracy
+  const threeYearsAgo = new Date(selDate);
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+  const dataStart = threeYearsAgo.toISOString().split('T')[0];
+  const dataEnd = selDate.toISOString().split('T')[0];
+  let yearData = timeSeriesData;
       try {
         setIsLoading(false); // Don't show loading overlay for prediction
         setProgress(10);
-        if (!yearData || yearData.length < 300) {
+        if (!yearData || yearData.length < 900) {
           // Fetch in background and update progress
           const fetchPromise = fetchTimeSeriesData({
             lat: selectedLocation.lat,
             lon: selectedLocation.lon,
-            startDate: yearStart,
-            endDate: yearEnd,
+            startDate: dataStart,
+            endDate: dataEnd,
           });
-          // Simulate progress: always finish in 15s
+          // Simulate progress: always finish in 50s
           let fakeProgress = 10;
           progressTimer = setInterval(() => {
             const elapsed = Date.now() - progressStart;
-            // Progress is proportional to elapsed time, always reaches 70 by 13s
-            let target = Math.min(70, 10 + (elapsed / 13000) * 60);
+            // Progress is proportional to elapsed time, always reaches 70 by 45s
+            let target = Math.min(70, 10 + (elapsed / 45000) * 60);
             if (fakeProgress < target) {
               fakeProgress = target;
               setProgress(Math.min(fakeProgress, 70));
@@ -151,7 +151,7 @@ const Index = () => {
           if (progressTimer) clearInterval(progressTimer);
           setProgress(80);
         }
-        // Predict using seasonal pattern: find the closest day-of-year in past year
+        // Predict using seasonal pattern: find the closest day-of-year in all years
         const targetDay = selDate.getMonth() * 31 + selDate.getDate();
         // Use a ±14-day window for more robust seasonality
         const windowDays = 14;
