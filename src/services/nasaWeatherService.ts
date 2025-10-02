@@ -20,14 +20,23 @@ export const fetchNASAWeatherData = async (
   endDate: string
 ): Promise<NASAWeatherData> => {
   try {
-    // NASA POWER API parameters for weather/hydrology data
+    // NASA POWER API only has historical data with ~3-5 days delay
+    // Query the last 7 days to ensure we get valid data
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    
+    const formatDate = (date: Date) => {
+      return date.toISOString().split('T')[0].replace(/-/g, '');
+    };
+
     const params = new URLSearchParams({
       parameters: 'T2M,PRECTOTCORR,RH2M,WS2M,PS,ALLSKY_SFC_UV_INDEX',
       community: 'RE',
       longitude: lon.toString(),
       latitude: lat.toString(),
-      start: startDate.replace(/-/g, ''),
-      end: endDate.replace(/-/g, ''),
+      start: formatDate(sevenDaysAgo),
+      end: formatDate(today),
       format: 'JSON'
     });
 
@@ -44,21 +53,36 @@ export const fetchNASAWeatherData = async (
     const data = await response.json();
     const parameters = data.properties.parameter;
 
-    // Get the most recent data point
-    const dates = Object.keys(parameters.T2M || {});
-    const latestDate = dates[dates.length - 1];
+    // Get all dates and filter out -999 values to find the most recent valid data
+    const t2mDates = Object.keys(parameters.T2M || {});
+    
+    // Find the most recent date with valid data (not -999)
+    let validDate = null;
+    for (let i = t2mDates.length - 1; i >= 0; i--) {
+      const date = t2mDates[i];
+      if (parameters.T2M[date] !== -999) {
+        validDate = date;
+        break;
+      }
+    }
 
-    // NASA POWER uses -999 as fill value for missing data - filter these out
-    const getValidValue = (value: number, fallback: number): number => {
-      return (value === -999 || value === null || value === undefined) ? fallback : value;
-    };
+    if (!validDate) {
+      throw new Error('No valid data available from NASA POWER API');
+    }
 
-    const temperature = getValidValue(parameters.T2M?.[latestDate], 20);
-    const precipitation = getValidValue(parameters.PRECTOTCORR?.[latestDate], 0);
-    const humidity = getValidValue(parameters.RH2M?.[latestDate], 60);
-    const windSpeed = getValidValue(parameters.WS2M?.[latestDate], 5);
-    const pressure = getValidValue(parameters.PS?.[latestDate], 101.3);
-    const uvIndex = getValidValue(parameters.ALLSKY_SFC_UV_INDEX?.[latestDate], 5);
+    // Extract values from the most recent valid date
+    const temperature = parameters.T2M?.[validDate];
+    const precipitation = parameters.PRECTOTCORR?.[validDate];
+    const humidity = parameters.RH2M?.[validDate];
+    const windSpeed = parameters.WS2M?.[validDate];
+    const pressure = parameters.PS?.[validDate];
+    const uvIndex = parameters.ALLSKY_SFC_UV_INDEX?.[validDate];
+
+    // Validate all values are not -999
+    if (temperature === -999 || precipitation === -999 || humidity === -999 || 
+        windSpeed === -999 || pressure === -999 || uvIndex === -999) {
+      throw new Error('Received invalid data from NASA POWER API');
+    }
 
     // Determine weather condition based on data
     let condition: NASAWeatherData['condition'] = 'sunny';
