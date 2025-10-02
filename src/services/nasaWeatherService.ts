@@ -1,6 +1,6 @@
-// NASA POWER API Service for weather data
-const NASA_API_KEY = "XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG";
-const NASA_POWER_BASE_URL = "https://power.larc.nasa.gov/api/temporal/daily/point";
+// Weather Service using Supabase Edge Function
+const SUPABASE_URL = "https://qxlcgekggsojggybchcz.supabase.co";
+const WEATHER_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/get-weather`;
 
 export interface NASAWeatherData {
   temperature: number;
@@ -20,94 +20,33 @@ export const fetchNASAWeatherData = async (
   endDate: string
 ): Promise<NASAWeatherData> => {
   try {
-    // NASA POWER API only has historical data with ~3-5 days delay
-    // Query the last 7 days to ensure we get valid data
-    const today = new Date();
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 7);
+    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}`);
     
-    const formatDate = (date: Date) => {
-      return date.toISOString().split('T')[0].replace(/-/g, '');
-    };
-
-    const params = new URLSearchParams({
-      parameters: 'T2M,PRECTOTCORR,RH2M,WS2M,PS,ALLSKY_SFC_UV_INDEX',
-      community: 'RE',
-      longitude: lon.toString(),
-      latitude: lat.toString(),
-      start: formatDate(sevenDaysAgo),
-      end: formatDate(today),
-      format: 'JSON'
-    });
-
-    const response = await fetch(`${NASA_POWER_BASE_URL}?${params}`, {
+    const response = await fetch(WEATHER_FUNCTION_URL, {
+      method: 'POST',
       headers: {
-        'Accept': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ lat, lon })
     });
 
     if (!response.ok) {
-      throw new Error(`NASA API error: ${response.status}`);
+      throw new Error(`Weather API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const parameters = data.properties.parameter;
-
-    // Get all dates and filter out -999 values to find the most recent valid data
-    const t2mDates = Object.keys(parameters.T2M || {});
     
-    // Find the most recent date with valid data (not -999)
-    let validDate = null;
-    for (let i = t2mDates.length - 1; i >= 0; i--) {
-      const date = t2mDates[i];
-      if (parameters.T2M[date] !== -999) {
-        validDate = date;
-        break;
-      }
-    }
-
-    if (!validDate) {
-      throw new Error('No valid data available from NASA POWER API');
-    }
-
-    // Extract values from the most recent valid date
-    const temperature = parameters.T2M?.[validDate];
-    const precipitation = parameters.PRECTOTCORR?.[validDate];
-    const humidity = parameters.RH2M?.[validDate];
-    const windSpeed = parameters.WS2M?.[validDate];
-    const pressure = parameters.PS?.[validDate];
-    const uvIndex = parameters.ALLSKY_SFC_UV_INDEX?.[validDate];
-
-    // Validate all values are not -999
-    if (temperature === -999 || precipitation === -999 || humidity === -999 || 
-        windSpeed === -999 || pressure === -999 || uvIndex === -999) {
-      throw new Error('Received invalid data from NASA POWER API');
-    }
-
-    // Determine weather condition based on data
-    let condition: NASAWeatherData['condition'] = 'sunny';
+    console.log('Weather data received:', data);
     
-    if (precipitation > 10) {
-      condition = precipitation > 30 ? 'stormy' : 'rainy';
-    } else if (humidity > 85) {
-      condition = 'very cloudy';
-    } else if (humidity > 70) {
-      condition = 'cloudy';
-    } else if (humidity > 50) {
-      condition = 'partly cloudy';
-    } else if (uvIndex > 8 && temperature > 25) {
-      condition = 'very sunny';
-    }
-
     return {
-      temperature,
-      precipitation,
-      humidity,
-      windSpeed,
-      pressure,
-      visibility: 10 - (humidity / 10), // Estimate visibility
-      uvIndex,
-      condition
+      temperature: data.temperature,
+      precipitation: data.precipitation,
+      humidity: data.humidity,
+      windSpeed: data.windSpeed,
+      pressure: data.pressure,
+      visibility: data.visibility,
+      uvIndex: data.uvIndex,
+      condition: data.condition
     };
   } catch (error) {
     console.error('Error fetching NASA weather data:', error);
