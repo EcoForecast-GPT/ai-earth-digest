@@ -57,7 +57,7 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
       const body = await response.json();
       if (body.fallback) {
         // Convert synthetic fallback series into chart shape
-        return body.series.map((s: any) => ({ time: s.timestamp, temperature: s.tempK - 273.15, precipitation: 0 }));
+        return body.series.map((s: any) => ({ time: s.timestamp, temperature: s.tempK - 273.15, precipitation: s.precipMm ?? s.precipitation ?? 0 }));
       }
       // If the function returned JSON for other reasons, try to extract a series field
       if (Array.isArray(body.series)) {

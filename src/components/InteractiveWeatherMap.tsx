@@ -37,12 +37,19 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
 
   // Get API key on client
   useEffect(() => {
-    setMaptilerApiKey(import.meta.env.VITE_MAPTILER_API_KEY);
+    const key = import.meta.env.VITE_MAPTILER_API_KEY ?? import.meta.env.NEXT_PUBLIC_MAPTILER_API_KEY;
+    setMaptilerApiKey(key ?? null);
   }, []);
 
   // Initialize MapLibre with MapTiler
   useEffect(() => {
-    if (!mapContainer.current || map.current || !maptilerApiKey) return;
+    if (!mapContainer.current || map.current) return;
+    if (!maptilerApiKey) {
+      // Fail fast with a clear error so the UI shows a message instead of a perpetual loader.
+      setMapError("Configuration Error: MapTiler API key is missing. Please check your environment variables.");
+      setIsLoaded(true);
+      return;
+    }
 
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {

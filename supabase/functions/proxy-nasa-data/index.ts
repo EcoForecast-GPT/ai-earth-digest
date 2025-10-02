@@ -35,7 +35,9 @@ serve(async (req) => {
         for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
           // create a plausible temperature in Kelvin (288K ~ 15C)
           const tempK = 288 + (Math.sin(d.getUTCDate() / 28 * Math.PI * 2) * 3);
-          series.push({ timestamp: new Date(d).toISOString(), tempK });
+          // synthetic precipitation in mm for the day (0-10)
+          const precipMm = Math.max(0, Math.round((Math.abs(Math.sin(d.getUTCDate())) * 6 + Math.random() * 4) * 10) / 10);
+          series.push({ timestamp: new Date(d).toISOString(), tempK, precipMm });
         }
 
         const fallback = {
