@@ -103,7 +103,9 @@ serve(async (req) => {
       else if (weatherCode >= 80 && weatherCode <= 99) visibility = 4; // showers/thunderstorms
       else if (humidity > 85) visibility = 7;
 
+
       let condition = codeToCondition(weatherCode);
+      // Only override to 'partly cloudy' if it's currently 'sunny' or 'very sunny', humidity is high, and not rainy/cloudy
       if ((condition === 'sunny' || condition === 'very sunny') && humidity > 70) {
         condition = 'partly cloudy';
       }

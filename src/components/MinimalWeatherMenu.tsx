@@ -52,13 +52,15 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
           rotate: [0, 360],
           scale: [1, 1.1, 1]
         } : {
-          y: [0, -5, 0]
+          y: [0, -5, 0],
+          rotate: 0
         }}
         transition={{ 
           duration: isLoading ? 2 : 3,
           repeat: Infinity,
           ease: "easeInOut"
         }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         {getWeatherIcon(condition)}
       </motion.div>
