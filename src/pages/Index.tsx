@@ -102,30 +102,36 @@ const Index = () => {
         progress = val;
         setPredictionProgress(val);
       };
-      // Timeout after 50 seconds
+      // Guarantee minimum 50s, maximum 51s for prediction
       let didTimeout = false;
       let partialData: any[] | null = null;
+      let computationDone = false;
+      let computationResult: any = null;
+      const minTime = 50000;
+      const maxTime = 51000;
+      const startTime = Date.now();
       const timeoutPromise = new Promise((resolve, reject) => {
         setTimeout(() => {
           didTimeout = true;
-          // Use whatever partial data is available
-          if (partialData && partialData.length > 0) {
+          if (computationDone) {
+            resolve(computationResult);
+          } else if (partialData && partialData.length > 0) {
             resolve(partialData);
           } else {
             reject(new Error('Prediction timed out.'));
           }
-        }, 50000);
+        }, maxTime);
       });
-  // Fetch up to 3 years of data for better accuracy
-  const threeYearsAgo = new Date(selDate);
-  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
-  const dataStart = threeYearsAgo.toISOString().split('T')[0];
+  // Fetch up to 5 years of data for even better accuracy
+  const fiveYearsAgo = new Date(selDate);
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  const dataStart = fiveYearsAgo.toISOString().split('T')[0];
   const dataEnd = selDate.toISOString().split('T')[0];
   let yearData = timeSeriesData;
       try {
         setIsLoading(false); // Don't show loading overlay for prediction
         setProgress(10);
-        if (!yearData || yearData.length < 900) {
+        if (!yearData || yearData.length < 1500) {
           // Fetch in background and update progress
           const fetchPromise = fetchTimeSeriesData({
             lat: selectedLocation.lat,
@@ -137,8 +143,8 @@ const Index = () => {
           let fakeProgress = 10;
           progressTimer = setInterval(() => {
             const elapsed = Date.now() - progressStart;
-            // Progress is proportional to elapsed time, always reaches 70 by 45s
-            let target = Math.min(70, 10 + (elapsed / 45000) * 60);
+            // Progress is proportional to elapsed time, always reaches 70 by 49s
+            let target = Math.min(70, 10 + (elapsed / 49000) * 60);
             if (fakeProgress < target) {
               fakeProgress = target;
               setProgress(Math.min(fakeProgress, 70));
@@ -195,11 +201,18 @@ const Index = () => {
           uvIndex: 6,
           timeSeries: [],
         };
-        setWeatherData(predicted);
-        setWeatherCondition(predCondition as WeatherCondition);
-        setProgress(100);
-        setTimeout(() => setPredictionProgress(null), 1000);
-        setIsLoading(false);
+        computationDone = true;
+        computationResult = yearData;
+        // Wait until at least 50s have elapsed before showing result
+        const elapsed = Date.now() - startTime;
+        const waitTime = Math.max(0, minTime - elapsed);
+        setTimeout(() => {
+          setWeatherData(predicted);
+          setWeatherCondition(predCondition as WeatherCondition);
+          setProgress(100);
+          setTimeout(() => setPredictionProgress(null), 1000);
+          setIsLoading(false);
+        }, waitTime);
         return;
       } catch (e) {
         if (progressTimer) clearInterval(progressTimer);
