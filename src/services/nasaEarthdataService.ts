@@ -21,9 +21,10 @@ interface TimeSeriesParams {
 export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
   const { lat, lon, startDate, endDate } = params;
 
-  // GLDAS dataset provides key weather variables.
-  const dataset = 'GLDAS_NOAH025_3H_V2.1'; 
-  const variables = 'Tair_f_inst,Rainf_f_tavg'; // Air Temperature, Rainfall rate
+
+  // Add humidity (Qair_f_inst) and wind speed (Wind_f_inst) to the variables
+  const dataset = 'GLDAS_NOAH025_3H_V2.1';
+  const variables = 'Tair_f_inst,Rainf_f_tavg,Qair_f_inst,Wind_f_inst'; // Air Temp, Rain, Humidity, Wind
 
   const url = `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=${dataset}:${variables}&location=GEOM:POINT(${lon},%20${lat})&startDate=${startDate}T00&endDate=${endDate}T23&type=json`;
 
@@ -40,27 +41,36 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
 
     const rawData = await response.json();
     
+
     // The data is returned in a specific format that needs parsing.
     // It's an array of arrays, where each inner array corresponds to a variable.
     const temperatureData = rawData.data[0];
     const precipitationData = rawData.data[1];
+    const humidityData = rawData.data[2];
+    const windData = rawData.data[3];
 
     const parsedData = temperatureData.map((entry: any, index: number) => {
       const timestamp = entry[0];
       const temperatureKelvin = entry[1];
       const precipitationRate = precipitationData[index][1];
+      const humidity = humidityData ? humidityData[index][1] : undefined;
+      const windSpeed = windData ? windData[index][1] : undefined;
 
       // Convert temperature from Kelvin to Celsius
       const temperatureCelsius = temperatureKelvin - 273.15;
-      
       // Convert precipitation rate (kg/m^2/s) to mm/hr
       // 1 kg/m^2/s = 3600 mm/hr
       const precipitationMmHr = precipitationRate * 3600;
+      // Convert humidity from kg/kg to % (approximate, multiply by 100)
+      const humidityPercent = humidity !== undefined ? humidity * 100 : undefined;
+      // Wind speed is already in m/s
 
       return {
         time: new Date(timestamp).toISOString(),
         temperature: temperatureCelsius,
         precipitation: precipitationMmHr,
+        humidity: humidityPercent,
+        windSpeed: windSpeed,
       };
     });
 
