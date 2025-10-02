@@ -52,8 +52,22 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
       throw new Error(`Proxy service error: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
     }
 
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body = await response.json();
+      if (body.fallback) {
+        // Convert synthetic fallback series into chart shape
+        return body.series.map((s: any) => ({ time: s.timestamp, temperature: s.tempK - 273.15, precipitation: 0 }));
+      }
+      // If the function returned JSON for other reasons, try to extract a series field
+      if (Array.isArray(body.series)) {
+        return body.series.map((s: any) => ({ time: s.timestamp || s.time, temperature: (s.tempK ? s.tempK - 273.15 : s.temperature), precipitation: s.precipitation ?? 0 }));
+      }
+      throw new Error('Unexpected JSON response from proxy.');
+    }
+
     const rawText = await response.text();
-    
+
     // The data is returned as a multi-line string that needs parsing.
     // Skip header lines and parse data lines.
     const lines = rawText.trim().split('\n');
