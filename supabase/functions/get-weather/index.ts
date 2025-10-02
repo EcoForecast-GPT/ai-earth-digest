@@ -33,9 +33,21 @@ serve(async (req) => {
 
     console.log(`Fetching weather for lat: ${lat}, lon: ${lon}`);
 
-    // Use Open-Meteo for current weather (free, no auth, highly accurate)
-    const openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`;
+    // Get date parameter from request, defaulting to current date
+    const { date } = await req.json();
+    const targetDate = date || new Date().toISOString().split('T')[0];
     
+    // Use Open-Meteo historical weather API for past dates, forecast for future
+    const isPastDate = new Date(targetDate) < new Date();
+    const baseUrl = isPastDate 
+      ? 'https://archive-api.open-meteo.com/v1/archive'
+      : 'https://api.open-meteo.com/v1/forecast';
+      
+    const openMeteoUrl = isPastDate
+      ? `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${targetDate}&end_date=${targetDate}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`
+      : `${baseUrl}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`;
+    
+    console.log(`Fetching weather from: ${openMeteoUrl}`);
     const response = await fetch(openMeteoUrl);
     
     if (!response.ok) {
@@ -48,14 +60,41 @@ serve(async (req) => {
 
     console.log('Open-Meteo response:', JSON.stringify(data));
 
-    // Extract weather data
-    const temperature = current.temperature_2m;
-    const humidity = current.relative_humidity_2m;
-    const precipitation = current.precipitation || 0;
-    const windSpeed = current.wind_speed_10m;
-    const pressure = current.surface_pressure;
-    const uvIndex = daily.uv_index_max[0] || 5;
-    const weatherCode = current.weather_code;
+    // Extract weather data based on response type (historical vs current)
+    let temperature, humidity, precipitation, windSpeed, pressure, uvIndex, weatherCode;
+    
+    if (isPastDate && data.hourly) {
+      // For historical data, use the specified hour or default to noon
+      const hour = (new Date(targetDate).getHours() || 12) % 24;
+      const idx = hour;
+      
+      temperature = data.hourly.temperature_2m[idx];
+      humidity = data.hourly.relative_humidity_2m[idx];
+      precipitation = data.hourly.precipitation[idx] || 0;
+      windSpeed = data.hourly.wind_speed_10m[idx];
+      pressure = data.hourly.surface_pressure[idx];
+      uvIndex = daily.uv_index_max[0] || 5;
+      weatherCode = data.hourly.weather_code[idx];
+      
+      console.log(`Using historical data for hour ${hour}:`, {
+        temperature,
+        humidity,
+        precipitation,
+        windSpeed,
+        pressure,
+        uvIndex,
+        weatherCode
+      });
+    } else {
+      // Current weather data
+      temperature = current.temperature_2m;
+      humidity = current.relative_humidity_2m;
+      precipitation = current.precipitation || 0;
+      windSpeed = current.wind_speed_10m;
+      pressure = current.surface_pressure;
+      uvIndex = daily.uv_index_max[0] || 5;
+      weatherCode = current.weather_code;
+    }
 
     // Calculate visibility based on weather conditions
     let visibility = 10;
