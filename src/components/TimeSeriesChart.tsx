@@ -35,6 +35,9 @@ const TimeSeriesChart = ({
 }: TimeSeriesChartProps) => {
   // Debug: show incoming data in console to verify what chart receives
   console.debug('TimeSeriesChart props:', { length: data?.length, selectedVars, sample: data?.slice(0,5) });
+  // Defensive guards
+  const safeData: TimeSeriesDataPoint[] = Array.isArray(data) ? data : [];
+  const safeSelectedVars: string[] = Array.isArray(selectedVars) && selectedVars.length > 0 ? selectedVars : ['temperature'];
   const getVariableColor = (variable: string) => {
     const colors: { [key: string]: string } = {
       temperature: "hsl(var(--primary))",
@@ -135,10 +138,13 @@ const TimeSeriesChart = ({
             />
             {/* Compute axis domains so both lines are visible when scale differs */}
             {(() => {
-              const leftVar = selectedVars[0];
-              const rightVar = selectedVars[1];
-              const leftMax = Math.max(...data.map(d => Math.abs(d[leftVar] ?? 0)), 1);
-              const rightMax = rightVar ? Math.max(...data.map(d => Math.abs(d[rightVar] ?? 0)), 1) : undefined;
+              const leftVar = safeSelectedVars[0];
+              const rightVar = safeSelectedVars[1];
+              // Compute max using safeData and safe access
+              const leftValues = safeData.map(d => (d as any)[leftVar]).filter(v => typeof v === 'number') as number[];
+              const rightValues = rightVar ? safeData.map(d => (d as any)[rightVar]).filter(v => typeof v === 'number') as number[] : [];
+              const leftMax = leftValues.length > 0 ? Math.max(...leftValues.map(Math.abs)) : 1;
+              const rightMax = rightValues.length > 0 ? Math.max(...rightValues.map(Math.abs)) : undefined;
 
               return (
                 <>
@@ -176,7 +182,7 @@ const TimeSeriesChart = ({
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
             
-            {selectedVars.map((variable, index) => (
+            {safeSelectedVars.map((variable, index) => (
               <Line
                 key={variable}
                 yAxisId={index === 0 ? "left" : "right"}
