@@ -41,9 +41,9 @@ const TimeSeriesChart = ({
   const getVariableColor = (variable: string) => {
     const colors: { [key: string]: string } = {
       temperature: "hsl(var(--primary))",
-      precipitation: "hsl(var(--cyan-500))", // A different color for distinction
-      humidity: "hsl(var(--green-500))",
-      windSpeed: "hsl(var(--orange-500))",
+      precipitation: "#06b6d4", // cyan-500 fallback for visibility
+      humidity: "#22c55e", // green-500
+      windSpeed: "#f59e42", // orange-500
     };
     return colors[variable] || "hsl(var(--foreground))";
   };
@@ -182,19 +182,26 @@ const TimeSeriesChart = ({
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
             
-            {safeSelectedVars.map((variable, index) => (
-              <Line
-                key={variable}
-                yAxisId={index === 0 ? "left" : "right"}
-                type="monotone"
-                dataKey={variable}
-                stroke={getVariableColor(variable)}
-                strokeWidth={2}
-                dot={false}
-                name={variable.charAt(0).toUpperCase() + variable.slice(1)}
-                unit={getVariableUnit(variable)}
-              />
-            ))}
+            {/* Always render precipitation if present in data, even if not in selectedVars */}
+            {['precipitation', ...safeSelectedVars.filter(v => v !== 'precipitation')].map((variable, index) => {
+              // Only render if at least one data point has this variable
+              const hasData = safeData.some(d => typeof d[variable as keyof TimeSeriesDataPoint] === 'number');
+              if (!hasData) return null;
+              return (
+                <Line
+                  key={variable}
+                  yAxisId={variable === 'precipitation' ? 'right' : (index === 0 ? 'left' : 'right')}
+                  type="monotone"
+                  dataKey={variable}
+                  stroke={getVariableColor(variable)}
+                  strokeWidth={variable === 'precipitation' ? 3 : 2}
+                  dot={false}
+                  name={variable.charAt(0).toUpperCase() + variable.slice(1)}
+                  unit={getVariableUnit(variable)}
+                  strokeDasharray={variable === 'precipitation' ? '6 3' : undefined}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       </CardContent>

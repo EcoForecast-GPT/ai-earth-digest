@@ -89,7 +89,7 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
   }, [location, weatherData.length, isLoading]);
 
   return (
-    <div className="p-6 h-full flex flex-col">
+    <div className="p-6 h-full flex flex-col w-full max-w-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-semibold text-foreground flex items-center gap-2">
           <div className="w-2 h-2 bg-accent rounded-full animate-pulse-glow" />
