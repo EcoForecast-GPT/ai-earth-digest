@@ -96,27 +96,34 @@ const Index = () => {
     if (selDate > today && selDate <= maxFuture) {
       setPredictionProgress(0);
       let progress = 0;
-      let progressTimer: NodeJS.Timeout | null = null;
+  let progressTimer: ReturnType<typeof setInterval> | null = null;
+  let progressStart = Date.now();
       const setProgress = (val: number) => {
         progress = val;
         setPredictionProgress(val);
       };
-      // Timeout after 20 seconds
+      // Timeout after 15 seconds
       let didTimeout = false;
-      const timeoutPromise = new Promise((_, reject) => {
+      let partialData: any[] | null = null;
+      const timeoutPromise = new Promise((resolve, reject) => {
         setTimeout(() => {
           didTimeout = true;
-          reject(new Error('Prediction timed out.'));
-        }, 20000);
+          // Use whatever partial data is available
+          if (partialData && partialData.length > 0) {
+            resolve(partialData);
+          } else {
+            reject(new Error('Prediction timed out.'));
+          }
+        }, 15000);
       });
-      // If we don't have a full year of data, fetch it first
+      // Only fetch the exact year needed for the prediction
       const oneYearAgo = new Date(selDate);
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
       const yearStart = oneYearAgo.toISOString().split('T')[0];
-      const yearEnd = today.toISOString().split('T')[0];
+      const yearEnd = selDate.toISOString().split('T')[0];
       let yearData = timeSeriesData;
       try {
-        setIsLoading(true);
+        setIsLoading(false); // Don't show loading overlay for prediction
         setProgress(10);
         if (!yearData || yearData.length < 300) {
           // Fetch in background and update progress
@@ -126,14 +133,19 @@ const Index = () => {
             startDate: yearStart,
             endDate: yearEnd,
           });
-          // Simulate progress
+          // Simulate progress: always finish in 15s
           let fakeProgress = 10;
           progressTimer = setInterval(() => {
-            if (fakeProgress < 70) {
-              fakeProgress += 2 + Math.random() * 3;
+            const elapsed = Date.now() - progressStart;
+            // Progress is proportional to elapsed time, always reaches 70 by 13s
+            let target = Math.min(70, 10 + (elapsed / 13000) * 60);
+            if (fakeProgress < target) {
+              fakeProgress = target;
               setProgress(Math.min(fakeProgress, 70));
             }
-          }, 300);
+          }, 100);
+          // As data comes in, update partialData
+          fetchPromise.then(d => { partialData = d; });
           yearData = await Promise.race([fetchPromise, timeoutPromise]);
           setTimeSeriesData(yearData);
           if (progressTimer) clearInterval(progressTimer);
@@ -523,7 +535,7 @@ const Index = () => {
 
       {/* Loading overlay */}
       <AnimatePresence>
-        {(isLoading || locationLoading) && (
+        {(isLoading || locationLoading) && predictionProgress === null && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
