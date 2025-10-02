@@ -96,19 +96,20 @@ const Index = () => {
     if (selDate > today && selDate <= maxFuture) {
       setPredictionProgress(0);
       let progress = 0;
-  let progressTimer: ReturnType<typeof setInterval> | null = null;
-  let progressStart = Date.now();
+      let progressTimer: ReturnType<typeof setInterval> | null = null;
+      let progressStart = Date.now();
       const setProgress = (val: number) => {
         progress = val;
         setPredictionProgress(val);
       };
-      // Guarantee minimum 50s, maximum 51s for prediction
+      // Guarantee minimum 50s, maximum 52s for prediction
       let didTimeout = false;
       let partialData: any[] | null = null;
       let computationDone = false;
       let computationResult: any = null;
       const minTime = 50000;
-      const maxTime = 51000;
+      const maxTime = 52000;
+      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1)); // 50-52s
       const startTime = Date.now();
       const timeoutPromise = new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -120,7 +121,7 @@ const Index = () => {
           } else {
             reject(new Error('Prediction timed out.'));
           }
-        }, maxTime);
+        }, duration);
       });
   // Fetch up to 10 years of data for maximum accuracy
   const tenYearsAgo = new Date(selDate);
@@ -139,23 +140,21 @@ const Index = () => {
             startDate: dataStart,
             endDate: dataEnd,
           });
-          // Simulate progress: always finish in 50s
-          let fakeProgress = 10;
+          // Simulate perfectly smooth progress: always finish in 50-52s
+          let fakeProgress = 0;
           progressTimer = setInterval(() => {
             const elapsed = Date.now() - progressStart;
-            // Progress is proportional to elapsed time, reaches 90% only at 49s
-            let target = Math.min(90, 10 + (elapsed / 49000) * 80);
-            if (fakeProgress < target) {
-              fakeProgress = target;
-              setProgress(Math.min(fakeProgress, 90));
-            }
+            // Progress is perfectly linear, from 0 to 90% over (duration - 2000ms)
+            let target = Math.min(90, (elapsed / (duration - 2000)) * 90);
+            fakeProgress = target;
+            setProgress(Math.min(fakeProgress, 90));
           }, 100);
           // As data comes in, update partialData
           fetchPromise.then(d => { partialData = d; });
           yearData = await Promise.race([fetchPromise, timeoutPromise]);
           setTimeSeriesData(yearData);
           if (progressTimer) clearInterval(progressTimer);
-          setProgress(80);
+          setProgress(95);
         }
         // Predict using seasonal pattern: find the closest day-of-year in all years
         const targetDay = selDate.getMonth() * 31 + selDate.getDate();
@@ -220,19 +219,37 @@ const Index = () => {
         let predCondition = 'sunny';
         if (isDubai && isSummer) {
           // Never predict rain in Dubai summer unless >99% of years had rain
-          if (rainyCount > 0.99 * weighted.length) predCondition = 'rainy';
-          else if (humidity > 85 && precipitation < 1 && dew > 18) predCondition = 'foggy';
-          else if (humidity > 75 && precipitation < 1) predCondition = 'humid';
-          else if (cloudyCount > weighted.length/2) predCondition = 'cloudy';
-          else if (temperature > 32) predCondition = 'sunny';
-          else if (temperature < 5) predCondition = 'cloudy';
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (rainyCount > 0.99 * weighted.length && precipitation > 10) {
+            predCondition = 'rainy';
+          } else if (humidity > 85 && precipitation < 1 && dew > 18) {
+            predCondition = 'foggy';
+          } else if (humidity > 75 && precipitation < 1) {
+            predCondition = 'humid';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
         } else {
-          if (rainyCount > weighted.length/2 && precipitation > 2) predCondition = 'rainy';
-          else if (cloudyCount > weighted.length/2) predCondition = 'cloudy';
-          else if (humidity > 92 && precipitation < 1 && dew > 16) predCondition = 'foggy';
-          else if (humidity > 85 && precipitation < 1) predCondition = 'humid';
-          else if (temperature > 32) predCondition = 'sunny';
-          else if (temperature < 5) predCondition = 'cloudy';
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (rainyCount > weighted.length/2 && precipitation > 10) {
+            predCondition = 'rainy';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (humidity > 92 && precipitation < 1 && dew > 16) {
+            predCondition = 'foggy';
+          } else if (humidity > 85 && precipitation < 1) {
+            predCondition = 'humid';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
         }
         const predicted: WeatherData = {
           timestamp: selectedDate,
