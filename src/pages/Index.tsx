@@ -153,24 +153,35 @@ const Index = () => {
         }
         // Predict using seasonal pattern: find the closest day-of-year in past year
         const targetDay = selDate.getMonth() * 31 + selDate.getDate();
-        // Find all past points within +/- 7 days of year
+        // Use a ±14-day window for more robust seasonality
+        const windowDays = 14;
         const candidates = yearData.filter(d => {
           const dDate = new Date(d.time);
           const dDay = dDate.getMonth() * 31 + dDate.getDate();
-          return Math.abs(dDay - targetDay) <= 7;
+          return Math.abs(dDay - targetDay) <= windowDays;
         });
         setProgress(90);
         // If not enough, fallback to all data
-        const useData = candidates.length > 5 ? candidates : yearData;
+        const useData = candidates.length > 10 ? candidates : yearData;
+        // Use median for precipitation and temperature
+        const median = (arr, key) => {
+          const vals = arr.map(d => d[key]).filter(v => typeof v === 'number' && !isNaN(v)).sort((a,b) => a-b);
+          const mid = Math.floor(vals.length/2);
+          return vals.length % 2 !== 0 ? vals[mid] : (vals[mid-1]+vals[mid])/2;
+        };
         const avg = (arr, key) => arr.reduce((sum, d) => sum + (d[key] ?? 0), 0) / arr.length;
-        const temperature = avg(useData, 'temperature');
-        const precipitation = avg(useData, 'precipitation');
-        const humidity = avg(useData, 'humidity');
-        const windSpeed = avg(useData, 'windSpeed');
-        // Guess condition based on precipitation/temperature
+        // Clamp outliers for precipitation
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const temperature = clamp(median(useData, 'temperature'), -20, 50);
+        const precipitation = clamp(median(useData, 'precipitation'), 0, 50);
+        const humidity = clamp(avg(useData, 'humidity'), 10, 100);
+        const windSpeed = clamp(avg(useData, 'windSpeed'), 0, 40);
+        // Only predict 'rainy' if >50% of window is rainy (>5mm)
+        const rainyCount = useData.filter(d => d.precipitation > 5).length;
+        const cloudyCount = useData.filter(d => d.precipitation > 1).length;
         let predCondition = 'sunny';
-        if (precipitation > 5) predCondition = 'rainy';
-        else if (precipitation > 1) predCondition = 'cloudy';
+        if (rainyCount > useData.length/2) predCondition = 'rainy';
+        else if (cloudyCount > useData.length/2) predCondition = 'cloudy';
         else if (temperature > 32) predCondition = 'sunny';
         else if (temperature < 5) predCondition = 'cloudy';
         const predicted: WeatherData = {
