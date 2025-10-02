@@ -322,13 +322,28 @@ const Index = () => {
 
           {showDebug && <DebugPanel />}
 
-          {/* Responsive Widget Layout */}
+
+          {/* Responsive Widget Layout (without Weather Controls) */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <ResponsiveLayout widgets={[weatherControlsWidget, likelihoodWidget, ...otherWidgets]} />
+            <ResponsiveLayout widgets={[likelihoodWidget, ...otherWidgets]} />
+          </motion.div>
+
+          {/* Weather Controls - Full Width at Bottom */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="w-full mt-8"
+          >
+            <div className="max-w-7xl mx-auto">
+              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
+                {weatherControlsWidget.component}
+              </div>
+            </div>
           </motion.div>
 
           {/* Data Export at Bottom */}
