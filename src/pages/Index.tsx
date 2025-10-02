@@ -155,8 +155,22 @@ const Index = () => {
     });
   }, [toast]);
 
-  // Create widgets for responsive layout - AI Summary is now second
-  const widgets = [
+  // Create widgets for responsive layout
+  const aiSummaryWidget = {
+    id: 'ai-summary',
+    title: 'AI Weather Analysis',
+    component: (
+      <AISummaryCard 
+        location={selectedLocation}
+        weatherData={weatherData ? [weatherData] : []}
+        isLoading={isLoading}
+      />
+    ),
+    priority: 9,
+    minHeight: 200,
+  };
+
+  const otherWidgets = [
     {
       id: 'weather-likelihood',
       title: 'Weather Likelihood',
@@ -169,19 +183,6 @@ const Index = () => {
       ),
       priority: 10,
       minHeight: 300,
-    },
-    {
-      id: 'ai-summary',
-      title: 'AI Weather Analysis',
-      component: (
-        <AISummaryCard 
-          location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
-        />
-      ),
-      priority: 9,
-      minHeight: 200,
     },
     {
       id: 'weather-chart',
@@ -249,13 +250,22 @@ const Index = () => {
             />
           </motion.div>
 
-          {/* Responsive Widget Layout */}
+          {/* AI Summary - Full Width */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <ResponsiveLayout widgets={widgets} />
+            {aiSummaryWidget.component}
+          </motion.div>
+
+          {/* Responsive Widget Layout */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <ResponsiveLayout widgets={otherWidgets} />
           </motion.div>
 
           {/* Data Export at Bottom */}
@@ -263,7 +273,7 @@ const Index = () => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.4 }}
               className="flex justify-center"
             >
               <DataExport 
