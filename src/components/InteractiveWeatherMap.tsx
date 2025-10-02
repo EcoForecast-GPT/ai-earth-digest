@@ -109,7 +109,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
           layers: [{
             id: 'background',
             type: 'background',
-            paint: { 'background-color': 'hsl(var(--muted))' }
+            paint: { 'background-color': 'hsl(0, 0%, 15%)' }
           }],
         };
 
