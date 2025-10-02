@@ -74,15 +74,25 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
     const dataLines = lines.filter(line => !line.startsWith('#') && !line.startsWith('Date'));
 
     const parsedData = dataLines.map(line => {
-      const [timestamp, tempStr] = line.split(/\s+/);
+      const tokens = line.split(/\s+/);
+      const timestamp = tokens[0];
+      const tempStr = tokens[1];
+      const precipStr = tokens[2];
       const temperatureKelvin = parseFloat(tempStr);
-      const temperatureCelsius = temperatureKelvin - 273.15;
+      const temperatureCelsius = isNaN(temperatureKelvin) ? NaN : (temperatureKelvin - 273.15);
+      let precipitation = 0;
+      if (precipStr !== undefined) {
+        const p = parseFloat(precipStr);
+        if (!isNaN(p)) {
+          // Assume precipitation in mm for the period
+          precipitation = p;
+        }
+      }
 
       return {
         time: new Date(timestamp).toISOString(),
         temperature: temperatureCelsius,
-        // Precipitation is not included in this simplified proxy for now
-        precipitation: 0, 
+        precipitation,
       };
     });
 

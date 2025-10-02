@@ -44,11 +44,6 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {
       try {
-        if (!maptilerApiKey) {
-          setMapError("Configuration Error: MapTiler API key is missing. Please check your environment variables.");
-          setIsLoaded(true);
-          return;
-        }
 
         // Add CSS
         const link = document.createElement('link');

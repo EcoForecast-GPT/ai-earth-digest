@@ -127,25 +127,39 @@ const TimeSeriesChart = ({
               axisLine={false}
               tickFormatter={formatXAxis}
             />
-            <YAxis
-              yAxisId="left"
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `${value}${getVariableUnit(selectedVars[0])}`}
-            />
-            {selectedVars.length > 1 && (
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${value}${getVariableUnit(selectedVars[1])}`}
-              />
-            )}
+            {/* Compute axis domains so both lines are visible when scale differs */}
+            {(() => {
+              const leftVar = selectedVars[0];
+              const rightVar = selectedVars[1];
+              const leftMax = Math.max(...data.map(d => Math.abs(d[leftVar] ?? 0)), 1);
+              const rightMax = rightVar ? Math.max(...data.map(d => Math.abs(d[rightVar] ?? 0)), 1) : undefined;
+
+              return (
+                <>
+                  <YAxis
+                    yAxisId="left"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${value}${getVariableUnit(leftVar)}`}
+                    domain={[Math.min(0, -leftMax * 0.2), leftMax * 1.2]}
+                  />
+                  {rightVar && (
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${value}${getVariableUnit(rightVar)}`}
+                      domain={[0, (rightMax ?? 1) * 1.2]}
+                    />
+                  )}
+                </>
+              );
+            })()}
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--background))",
