@@ -269,7 +269,7 @@ const Index = () => {
             <ResponsiveLayout widgets={otherWidgets} />
           </motion.div>
 
-          {/* Data Export at Bottom */}
+          {/* Data Export */}
           {weatherData && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -284,6 +284,26 @@ const Index = () => {
               />
             </motion.div>
           )}
+
+          {/* Advanced Options Menu */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <AdvancedOptionsMenu
+              location={selectedLocation}
+              onDataFetched={(data) => {
+                // Update page-level state when advanced widget fetches new data
+                setWeatherData(data);
+                try {
+                  setSelectedDate(new Date(data.timestamp));
+                } catch (e) {
+                  // ignore
+                }
+              }}
+            />
+          </motion.div>
         </div>
       </main>
 
@@ -291,20 +311,6 @@ const Index = () => {
       <FloatingChatInput 
         weatherData={weatherData}
         location={selectedLocation.name}
-      />
-
-      {/* Advanced Options Menu */}
-      <AdvancedOptionsMenu
-        location={selectedLocation}
-        onDataFetched={(data) => {
-          // Update page-level state when advanced widget fetches new data
-          setWeatherData(data);
-          try {
-            setSelectedDate(new Date(data.timestamp));
-          } catch (e) {
-            // ignore
-          }
-        }}
       />
 
       {/* Loading overlay */}

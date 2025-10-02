@@ -42,24 +42,31 @@ const AdvancedOptionsMenu: React.FC<AdvancedOptionsMenuProps> = ({ location, onD
         datePart
       );
 
-      // Build an hourly time series (0-23) similar to other widgets
-      const generatedSeries = Array.from({ length: 24 }, (_, hour) => ({
-        timestamp: `${datePart}T${hour.toString().padStart(2, '0')}:00:00Z`,
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        temperature: Math.round((nasaData.temperature + Math.sin(hour / 4) * 5) * 10) / 10,
-        precipitation: Math.round((nasaData.precipitation * (Math.random() * 0.5 + 0.5)) * 100) / 100,
-        windSpeed: Math.round((nasaData.windSpeed + Math.random() * 3) * 10) / 10,
-        humidity: Math.round((nasaData.humidity + Math.random() * 10 - 5) * 10) / 10,
-      }));
+      // Create a single timepoint from NASA data
+      const timePoint = {
+        timestamp: new Date(selectedDateTime).toISOString(),
+        time: new Date(selectedDateTime).toLocaleTimeString(),
+        temperature: nasaData.temperature,
+        precipitation: nasaData.precipitation,
+        windSpeed: nasaData.windSpeed,
+        humidity: nasaData.humidity,
+        pressure: nasaData.pressure,
+        visibility: nasaData.visibility,
+        uvIndex: nasaData.uvIndex
+      };
 
-      setTimeSeries(generatedSeries);
-
-      // Determine snapshot for specific time (nearest hour)
-      const selectedHour = parseInt(selectedDateTime.split('T')[1].split(':')[0], 10);
-      const snapshotPoint = generatedSeries[selectedHour];
-
+      setTimeSeries([timePoint]);
+      
+      // Use NASA data directly
       const pageData: PageWeatherData = {
-        timestamp: new Date(`${datePart}T${selectedHour.toString().padStart(2, '0')}:00:00Z`).toISOString(),
+        timestamp: timePoint.timestamp,
+        ...nasaData,
+        timeSeries: [timePoint]
+      };
+
+      // Update snapshot with real NASA data
+      const newData: PageWeatherData = {
+        timestamp: timePoint.timestamp,
         temperature: nasaData.temperature,
         precipitation: nasaData.precipitation,
         humidity: nasaData.humidity,
@@ -67,13 +74,13 @@ const AdvancedOptionsMenu: React.FC<AdvancedOptionsMenuProps> = ({ location, onD
         pressure: nasaData.pressure,
         visibility: nasaData.visibility,
         uvIndex: nasaData.uvIndex,
-        timeSeries: generatedSeries
+        timeSeries: [timePoint]
       };
 
-      setSnapshot(pageData);
+      setSnapshot(newData);
 
       // Notify parent so the rest of the page can update
-      onDataFetched?.(pageData);
+      onDataFetched?.(newData);
 
     } catch (err) {
       console.error('AdvancedOptionsMenu: failed to fetch NASA data', err);
@@ -84,10 +91,10 @@ const AdvancedOptionsMenu: React.FC<AdvancedOptionsMenuProps> = ({ location, onD
 
   return (
     <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="fixed bottom-0 left-0 w-full z-40"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="w-full mt-6"
     >
       <div className="max-w-7xl mx-auto px-4">
         <Card className="backdrop-blur-md bg-background/70 border-border/40">
