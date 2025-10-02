@@ -21,53 +21,49 @@ interface TimeSeriesParams {
 export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
   const { lat, lon, startDate, endDate } = params;
 
-  // GLDAS dataset provides key weather variables.
-  const dataset = 'GLDAS_NOAH025_3H_V2.1'; 
-  const variables = 'Tair_f_inst,Rainf_f_tavg'; // Air Temperature, Rainfall rate
-
-  const url = `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=${dataset}:${variables}&location=GEOM:POINT(${lon},%20${lat})&startDate=${startDate}T00&endDate=${endDate}T23&type=json`;
+  // Use the Supabase Edge Function as a proxy
+  const proxyUrl = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-nasa-data`);
+  proxyUrl.searchParams.append('lat', lat.toString());
+  proxyUrl.searchParams.append('lon', lon.toString());
+  proxyUrl.searchParams.append('startDate', startDate);
+  proxyUrl.searchParams.append('endDate', endDate);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(proxyUrl.toString(), {
       headers: {
-        'Authorization': `Bearer ${EARTHDATA_TOKEN}`
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
       }
     });
 
     if (!response.ok) {
-      throw new Error(`NASA Data Rods API Error: ${response.status} ${response.statusText}`);
+      const errorBody = await response.text();
+      throw new Error(`Proxy service error: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
-    const rawData = await response.json();
+    const rawText = await response.text();
     
-    // The data is returned in a specific format that needs parsing.
-    // It's an array of arrays, where each inner array corresponds to a variable.
-    const temperatureData = rawData.data[0];
-    const precipitationData = rawData.data[1];
+    // The data is returned as a multi-line string that needs parsing.
+    // Skip header lines and parse data lines.
+    const lines = rawText.trim().split('\n');
+    const dataLines = lines.filter(line => !line.startsWith('#') && !line.startsWith('Date'));
 
-    const parsedData = temperatureData.map((entry: any, index: number) => {
-      const timestamp = entry[0];
-      const temperatureKelvin = entry[1];
-      const precipitationRate = precipitationData[index][1];
-
-      // Convert temperature from Kelvin to Celsius
+    const parsedData = dataLines.map(line => {
+      const [timestamp, tempStr] = line.split(/\s+/);
+      const temperatureKelvin = parseFloat(tempStr);
       const temperatureCelsius = temperatureKelvin - 273.15;
-      
-      // Convert precipitation rate (kg/m^2/s) to mm/hr
-      // 1 kg/m^2/s = 3600 mm/hr
-      const precipitationMmHr = precipitationRate * 3600;
 
       return {
         time: new Date(timestamp).toISOString(),
         temperature: temperatureCelsius,
-        precipitation: precipitationMmHr,
+        // Precipitation is not included in this simplified proxy for now
+        precipitation: 0, 
       };
     });
 
     return parsedData;
 
   } catch (error) {
-    console.error("Failed to fetch or parse time-series data from NASA Data Rods:", error);
+    console.error("Failed to fetch or parse time-series data via proxy:", error);
     throw error;
   }
 };

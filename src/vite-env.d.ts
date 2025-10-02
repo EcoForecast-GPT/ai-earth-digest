@@ -2,6 +2,8 @@
 
 interface ImportMetaEnv {
     readonly VITE_MAPTILER_API_KEY: string;
+    readonly NEXT_PUBLIC_SUPABASE_URL: string;
+    readonly NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
     // more env variables...
   }
   
