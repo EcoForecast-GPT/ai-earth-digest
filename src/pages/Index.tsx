@@ -143,11 +143,11 @@ const Index = () => {
           let fakeProgress = 10;
           progressTimer = setInterval(() => {
             const elapsed = Date.now() - progressStart;
-            // Progress is proportional to elapsed time, reaches 90% only at 49s
-            let target = Math.min(90, 10 + (elapsed / 49000) * 80);
+            // Progress is perfectly smooth: 0% to 99% over 49.5s, only 100% at the very end
+            let target = Math.min(99, 1 + (elapsed / 49500) * 98);
             if (fakeProgress < target) {
               fakeProgress = target;
-              setProgress(Math.min(fakeProgress, 90));
+              setProgress(Math.min(fakeProgress, 99));
             }
           }, 100);
           // As data comes in, update partialData
@@ -166,7 +166,7 @@ const Index = () => {
           const dDay = dDate.getMonth() * 31 + dDate.getDate();
           return Math.abs(dDay - targetDay) <= windowDays;
         });
-        setProgress(95);
+  setProgress(99);
         // Weight recent years and similar years more
         const yearNow = selDate.getFullYear();
         const weighted = candidates.map(d => {
@@ -219,10 +219,10 @@ const Index = () => {
         const dew = dewPoint(temperature, humidity);
         let predCondition = 'sunny';
         if (isDubai && isSummer) {
-          // Never predict rain in Dubai summer unless >99% of years had rain
-          if (rainyCount > 0.99 * weighted.length) predCondition = 'rainy';
-          else if (humidity > 85 && precipitation < 1 && dew > 18) predCondition = 'foggy';
-          else if (humidity > 75 && precipitation < 1) predCondition = 'humid';
+          // Never predict rain in Dubai summer, period
+          if (rainyCount > 0.999 * weighted.length) predCondition = 'rainy';
+          else if (humidity > 90 && precipitation < 1 && dew > 18) predCondition = 'foggy';
+          else if (humidity > 80 && precipitation < 1) predCondition = 'humid';
           else if (cloudyCount > weighted.length/2) predCondition = 'cloudy';
           else if (temperature > 32) predCondition = 'sunny';
           else if (temperature < 5) predCondition = 'cloudy';
