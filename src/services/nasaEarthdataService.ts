@@ -21,8 +21,15 @@ interface TimeSeriesParams {
 export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
   const { lat, lon, startDate, endDate } = params;
 
-  // Use the Supabase Edge Function as a proxy
-  const proxyUrl = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-nasa-data`);
+  // Use the Supabase Edge Function as a proxy. Support both VITE_ and NEXT_PUBLIC_ prefixes.
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase URL or Anon Key not found in environment. Expected VITE_* or NEXT_PUBLIC_* env vars.');
+  }
+
+  const proxyUrl = new URL(`${supabaseUrl.replace(/\/$/, '')}/functions/v1/proxy-nasa-data`);
   proxyUrl.searchParams.append('lat', lat.toString());
   proxyUrl.searchParams.append('lon', lon.toString());
   proxyUrl.searchParams.append('startDate', startDate);
@@ -31,13 +38,18 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
   try {
     const response = await fetch(proxyUrl.toString(), {
       headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        // Supabase Functions accept either an Authorization Bearer token or an 'apikey' header.
+        // Provide both to be robust against different Supabase setups.
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
       }
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Proxy service error: ${response.status} ${response.statusText} - ${errorBody}`);
+      const contentType = response.headers.get('content-type') || '';
+      const errorBody = contentType.includes('application/json') ? await response.json() : await response.text();
+      // Throw a detailed error so the UI shows exact proxy response (helps debug 401 Invalid JWT).
+      throw new Error(`Proxy service error: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
     }
 
     const rawText = await response.text();

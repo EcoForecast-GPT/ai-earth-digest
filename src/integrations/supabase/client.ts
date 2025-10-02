@@ -2,11 +2,13 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Support both VITE_ and NEXT_PUBLIC_ prefixes so this works with your existing secrets setup.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase URL and Anon Key must be provided.");
+  // Provide a helpful runtime error for deployment logs on Vercel.
+  throw new Error('Supabase URL or Anon Key not found in environment. Expected VITE_* or NEXT_PUBLIC_* env vars.');
 }
 
 // Import the supabase client like this:
