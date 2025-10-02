@@ -15,6 +15,7 @@ import { PlanetLoader } from "@/components/PlanetLoader";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
+import AdvancedOptionsMenu from '@/components/AdvancedOptionsMenu';
 
 export interface WeatherLocation {
   lat: number;
@@ -279,6 +280,9 @@ const Index = () => {
         weatherData={weatherData}
         location={selectedLocation.name}
       />
+
+      {/* Advanced Options Menu */}
+      <AdvancedOptionsMenu />
 
       {/* Loading overlay */}
       <AnimatePresence>
