@@ -1,12 +1,6 @@
-// Weather Service using Supabase Edge Function. Read the URL from environment so it works in deployment.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL) {
-  throw new Error('SUPABASE_URL not found in environment.');
-}
-
-const WEATHER_FUNCTION_URL = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/get-weather`;
+// NASA POWER API Service for weather data
+const NASA_API_KEY = "XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG";
+const NASA_POWER_BASE_URL = "https://power.larc.nasa.gov/api/temporal/daily/point";
 
 export interface NASAWeatherData {
   temperature: number;
@@ -22,41 +16,111 @@ export interface NASAWeatherData {
 export const fetchNASAWeatherData = async (
   lat: number,
   lon: number,
-  date?: string
+  startDate: string,
+  endDate: string
 ): Promise<NASAWeatherData> => {
   try {
-    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
+    // NASA POWER API only has historical data with ~3-5 days delay
+    // Query the last 7 days to ensure we get valid data
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
     
-    const response = await fetch(WEATHER_FUNCTION_URL, {
-      method: 'POST',
+    const formatDate = (date: Date) => {
+      return date.toISOString().split('T')[0].replace(/-/g, '');
+    };
+
+    const params = new URLSearchParams({
+      parameters: 'T2M,PRECTOTCORR,RH2M,WS2M,PS,ALLSKY_SFC_UV_INDEX',
+      community: 'RE',
+      longitude: lon.toString(),
+      latitude: lat.toString(),
+      start: formatDate(sevenDaysAgo),
+      end: formatDate(today),
+      format: 'JSON'
+    });
+
+    const response = await fetch(`${NASA_POWER_BASE_URL}?${params}`, {
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey': SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ lat, lon, date })
+        'Accept': 'application/json'
+      }
     });
 
     if (!response.ok) {
-      throw new Error(`Weather API error: ${response.status}`);
+      throw new Error(`NASA API error: ${response.status}`);
     }
 
     const data = await response.json();
+    const parameters = data.properties.parameter;
+
+    // Get all dates and filter out -999 values to find the most recent valid data
+    const t2mDates = Object.keys(parameters.T2M || {});
     
-    console.log('Weather data received:', data);
+    // Find the most recent date with valid data (not -999)
+    let validDate = null;
+    for (let i = t2mDates.length - 1; i >= 0; i--) {
+      const date = t2mDates[i];
+      if (parameters.T2M[date] !== -999) {
+        validDate = date;
+        break;
+      }
+    }
+
+    if (!validDate) {
+      throw new Error('No valid data available from NASA POWER API');
+    }
+
+    // Extract values from the most recent valid date
+    const temperature = parameters.T2M?.[validDate];
+    const precipitation = parameters.PRECTOTCORR?.[validDate];
+    const humidity = parameters.RH2M?.[validDate];
+    const windSpeed = parameters.WS2M?.[validDate];
+    const pressure = parameters.PS?.[validDate];
+    const uvIndex = parameters.ALLSKY_SFC_UV_INDEX?.[validDate];
+
+    // Validate all values are not -999
+    if (temperature === -999 || precipitation === -999 || humidity === -999 || 
+        windSpeed === -999 || pressure === -999 || uvIndex === -999) {
+      throw new Error('Received invalid data from NASA POWER API');
+    }
+
+    // Determine weather condition based on data
+    let condition: NASAWeatherData['condition'] = 'sunny';
     
+    if (precipitation > 10) {
+      condition = precipitation > 30 ? 'stormy' : 'rainy';
+    } else if (humidity > 85) {
+      condition = 'very cloudy';
+    } else if (humidity > 70) {
+      condition = 'cloudy';
+    } else if (humidity > 50) {
+      condition = 'partly cloudy';
+    } else if (uvIndex > 8 && temperature > 25) {
+      condition = 'very sunny';
+    }
+
     return {
-      temperature: data.temperature,
-      precipitation: data.precipitation,
-      humidity: data.humidity,
-      windSpeed: data.windSpeed,
-      pressure: data.pressure,
-      visibility: data.visibility,
-      uvIndex: data.uvIndex,
-      condition: data.condition
+      temperature,
+      precipitation,
+      humidity,
+      windSpeed,
+      pressure,
+      visibility: 10 - (humidity / 10), // Estimate visibility
+      uvIndex,
+      condition
     };
   } catch (error) {
     console.error('Error fetching NASA weather data:', error);
-    throw error instanceof Error ? error : new Error('Unknown weather fetch error');
+    // Return fallback data
+    return {
+      temperature: 20,
+      precipitation: 0,
+      humidity: 60,
+      windSpeed: 5,
+      pressure: 101.3,
+      visibility: 10,
+      uvIndex: 5,
+      condition: 'sunny'
+    };
   }
 };

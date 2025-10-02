@@ -5,7 +5,7 @@ import { WeatherLocation } from '@/pages/Index';
 
 interface MinimalWeatherMenuProps {
   location: WeatherLocation;
-  temperature?: number; // made optional to avoid defaulting to 20
+  temperature: number;
   condition: string;
   isLoading: boolean;
 }
@@ -66,11 +66,11 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
       <div className="flex-1">
         <motion.div 
           className="text-3xl font-bold text-foreground"
-          key={`${temperature ?? 'loading'}`}
+          key={temperature}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
         >
-          {typeof temperature === 'number' ? `${Math.round(temperature)}°C` : '— °C'}
+          {Math.round(temperature)}°C
         </motion.div>
         <motion.div 
           className="text-sm text-muted-foreground capitalize"

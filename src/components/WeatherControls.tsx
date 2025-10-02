@@ -12,15 +12,15 @@ import DataExport from "./DataExport";
 interface WeatherControlsProps {
   location: WeatherLocation;
   onLocationChange: (location: WeatherLocation) => void;
-  dateTime: string;
-  onDateTimeChange: (datetime: string) => void;
+  dateRange: { start: string; end: string };
+  onDateRangeChange: (range: { start: string; end: string }) => void;
   isLoading: boolean;
   onFetch: () => void;
   weatherData: any[];
 }
 
 const presetLocations: WeatherLocation[] = [
-  { lat: 25.276987, lon: 55.296249, name: "Dubai" },
+  { lat: 40.7128, lon: -74.0060, name: "New York City" },
   { lat: 51.5074, lon: -0.1278, name: "London" },
   { lat: 35.6762, lon: 139.6503, name: "Tokyo" },
   { lat: -33.8688, lon: 151.2093, name: "Sydney" },
@@ -30,15 +30,13 @@ const presetLocations: WeatherLocation[] = [
 const WeatherControls = ({
   location,
   onLocationChange,
-  dateTime,
-  onDateTimeChange,
+  dateRange,
+  onDateRangeChange,
   isLoading,
   onFetch,
   weatherData
 }: WeatherControlsProps) => {
   const [customLocation, setCustomLocation] = useState("");
-  const [date, setDate] = useState(dateTime.split('T')[0]);
-  const [time, setTime] = useState(dateTime.split('T')[1] || "12:00");
   const { 
     location: detectedLocation, 
     loading: locationLoading, 
@@ -67,8 +65,8 @@ const WeatherControls = ({
         });
       } else {
         onLocationChange({
-          lat: 25.276987,
-          lon: 55.296249,
+          lat: 40.7128,
+          lon: -74.0060,
           name: customLocation
         });
       }
@@ -183,32 +181,26 @@ const WeatherControls = ({
       <motion.div className="space-y-4">
         <Label className="text-foreground flex items-center gap-2">
           <Calendar className="w-4 h-4 text-accent" />
-          Date & Time
+          Date Range
         </Label>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="date" className="text-sm text-muted-foreground">Date</Label>
+            <Label htmlFor="start-date" className="text-sm text-muted-foreground">Start Date</Label>
             <Input
-              id="date"
+              id="start-date"
               type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                onDateTimeChange(`${e.target.value}T${time}`);
-              }}
+              value={dateRange.start}
+              onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
               className="glass-panel border-white/10 focus:border-accent/50"
             />
           </div>
           <div>
-            <Label htmlFor="time" className="text-sm text-muted-foreground">Time</Label>
+            <Label htmlFor="end-date" className="text-sm text-muted-foreground">End Date</Label>
             <Input
-              id="time"
-              type="time"
-              value={time}
-              onChange={(e) => {
-                setTime(e.target.value);
-                onDateTimeChange(`${date}T${e.target.value}`);
-              }}
+              id="end-date"
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
               className="glass-panel border-white/10 focus:border-accent/50"
             />
           </div>
@@ -252,7 +244,7 @@ const WeatherControls = ({
         <DataExport 
           weatherData={weatherData}
           location={location}
-          dateRange={{start: date, end: date}}
+          dateRange={dateRange}
         />
       )}
     </motion.div>

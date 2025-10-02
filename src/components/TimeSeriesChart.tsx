@@ -1,204 +1,169 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-
-// This should match the output of our new nasaEarthdataService
-interface TimeSeriesDataPoint {
-  time: string;
-  temperature?: number;
-  precipitation?: number;
-  humidity?: number;
-  windSpeed?: number;
-}
+import { useEffect, useRef } from "react";
+import { WeatherData } from "@/pages/Index";
+import { Card } from "@/components/ui/card";
 
 interface TimeSeriesChartProps {
-  data: TimeSeriesDataPoint[];
+  data: WeatherData[];
   selectedVars: string[];
   isLoading: boolean;
-  error: string | null;
 }
 
-const TimeSeriesChart = ({
-  data,
-  selectedVars,
-  isLoading,
-  error,
-}: TimeSeriesChartProps) => {
-  // Debug: show incoming data in console to verify what chart receives
-  console.debug('TimeSeriesChart props:', { length: data?.length, selectedVars, sample: data?.slice(0,5) });
-  // Defensive guards
-  const safeData: TimeSeriesDataPoint[] = Array.isArray(data) ? data : [];
-  const safeSelectedVars: string[] = Array.isArray(selectedVars) && selectedVars.length > 0 ? selectedVars : ['temperature'];
+const TimeSeriesChart = ({ data, selectedVars, isLoading }: TimeSeriesChartProps) => {
+  const chartRef = useRef<HTMLCanvasElement>(null);
+
   const getVariableColor = (variable: string) => {
-    const colors: { [key: string]: string } = {
+    const colors = {
       temperature: "hsl(var(--primary))",
-      precipitation: "hsl(var(--cyan-500))", // A different color for distinction
-      humidity: "hsl(var(--green-500))",
-      windSpeed: "hsl(var(--orange-500))",
+      precipitation: "hsl(var(--accent))",
+      humidity: "hsl(var(--glow-secondary))",
+      windSpeed: "hsl(var(--destructive))"
     };
-    return colors[variable] || "hsl(var(--foreground))";
+    return colors[variable as keyof typeof colors] || "hsl(var(--foreground))";
   };
 
   const getVariableUnit = (variable: string) => {
-    const units: { [key: string]: string } = {
+    const units = {
       temperature: "°C",
-      precipitation: "mm/hr",
+      precipitation: "mm",
       humidity: "%",
-      windSpeed: "m/s",
+      windSpeed: "m/s"
     };
-    return units[variable] || "";
+    return units[variable as keyof typeof units] || "";
   };
 
-  const formatXAxis = (tickItem: string) => {
-    // If the timestamp is exactly midnight UTC, show date instead (daily series)
-    const d = new Date(tickItem);
-    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-      return d.toLocaleDateString('en-US');
+  // Mock chart rendering - in production this would use Chart.js
+  useEffect(() => {
+    if (!chartRef.current || !data.length) return;
+
+    const canvas = chartRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Set up dimensions
+    const padding = 40;
+    const width = canvas.width - 2 * padding;
+    const height = canvas.height - 2 * padding;
+
+    // Draw grid
+    ctx.strokeStyle = 'hsl(var(--border))';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 10; i++) {
+      const x = padding + (i * width) / 10;
+      const y = padding + (i * height) / 10;
+      
+      ctx.beginPath();
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, padding + height);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(padding + width, y);
+      ctx.stroke();
     }
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[350px] w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
+    // Draw data lines
+    selectedVars.forEach((variable, varIndex) => {
+      ctx.strokeStyle = getVariableColor(variable);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
 
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Weather Trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[350px] flex flex-col items-center justify-center text-center text-red-400">
-            <p className="font-semibold mb-2">Failed to load chart data.</p>
-            <p className="text-xs text-muted-foreground font-mono bg-destructive/10 p-2 rounded">{error}</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+      data.forEach((point, index) => {
+        const x = padding + (index / (data.length - 1)) * width;
+        const value = point[variable as keyof WeatherData] as number;
+        const normalizedValue = (value - Math.min(...data.map(d => d[variable as keyof WeatherData] as number))) / 
+                               (Math.max(...data.map(d => d[variable as keyof WeatherData] as number)) - 
+                                Math.min(...data.map(d => d[variable as keyof WeatherData] as number)));
+        const y = padding + height - (normalizedValue * height);
 
-  if (!data || data.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Weather Trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[350px] flex items-center justify-center text-muted-foreground">
-            No time-series data available for the selected period.
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      ctx.stroke();
+    });
+
+  }, [data, selectedVars]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Weather Trends</CardTitle>
-      </CardHeader>
-      <CardContent className="h-[400px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
-            margin={{
-              top: 5,
-              right: 30,
-              left: 0,
-              bottom: 5,
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis
-              dataKey="time"
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={formatXAxis}
-            />
-            {/* Compute axis domains so both lines are visible when scale differs */}
-            {(() => {
-              const leftVar = safeSelectedVars[0];
-              const rightVar = safeSelectedVars[1];
-              // Compute max using safeData and safe access
-              const leftValues = safeData.map(d => (d as any)[leftVar]).filter(v => typeof v === 'number') as number[];
-              const rightValues = rightVar ? safeData.map(d => (d as any)[rightVar]).filter(v => typeof v === 'number') as number[] : [];
-              const leftMax = leftValues.length > 0 ? Math.max(...leftValues.map(Math.abs)) : 1;
-              const rightMax = rightValues.length > 0 ? Math.max(...rightValues.map(Math.abs)) : undefined;
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-semibold text-foreground flex items-center gap-2">
+          <div className="w-2 h-2 bg-accent rounded-full animate-pulse-glow" />
+          Time Series Analysis
+        </h3>
+        
+        {isLoading && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="w-2 h-2 bg-primary rounded-full animate-pulse-glow" />
+            <span className="text-sm">Processing NASA data...</span>
+          </div>
+        )}
+      </div>
 
-              return (
-                <>
-                  <YAxis
-                    yAxisId="left"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${value}${getVariableUnit(leftVar)}`}
-                    domain={[Math.min(0, -leftMax * 0.2), leftMax * 1.2]}
-                  />
-                  {rightVar && (
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `${value}${getVariableUnit(rightVar)}`}
-                      domain={[0, (rightMax ?? 1) * 1.2]}
-                    />
-                  )}
-                </>
-              );
-            })()}
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--background))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "var(--radius)",
-              }}
-              labelFormatter={formatXAxis}
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mb-4">
+        {selectedVars.map((variable) => (
+          <div key={variable} className="flex items-center gap-2">
+            <div 
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: getVariableColor(variable) }}
             />
-            <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
-            
-            {safeSelectedVars.map((variable, index) => (
-              <Line
-                key={variable}
-                yAxisId={index === 0 ? "left" : "right"}
-                type="monotone"
-                dataKey={variable}
-                stroke={getVariableColor(variable)}
-                strokeWidth={2}
-                dot={false}
-                name={variable.charAt(0).toUpperCase() + variable.slice(1)}
-                unit={getVariableUnit(variable)}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+            <span className="text-sm capitalize text-foreground">
+              {variable} {getVariableUnit(variable)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart Canvas */}
+      <div className="relative">
+        <canvas
+          ref={chartRef}
+          width={800}
+          height={400}
+          className="w-full h-80 glass-panel rounded-lg"
+        />
+        
+        {/* Data overlay effects */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-4 right-4 glass-panel rounded p-2">
+            <p className="text-xs text-muted-foreground">
+              {data.length} data points
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart annotations */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        {selectedVars.slice(0, 3).map((variable) => {
+          const values = data.map(d => d[variable as keyof WeatherData] as number);
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const max = Math.max(...values);
+          const min = Math.min(...values);
+          
+          return (
+            <Card key={variable} className="glass-panel p-3">
+              <h4 className="text-sm font-medium capitalize text-foreground mb-2">
+                {variable}
+              </h4>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div>Avg: {avg.toFixed(1)}{getVariableUnit(variable)}</div>
+                <div>Max: {max.toFixed(1)}{getVariableUnit(variable)}</div>
+                <div>Min: {min.toFixed(1)}{getVariableUnit(variable)}</div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 };
 
