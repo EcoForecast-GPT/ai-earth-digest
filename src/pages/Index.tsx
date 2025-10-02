@@ -43,6 +43,18 @@ export interface WeatherData {
   }>;
 }
 
+export interface TimePoint {
+  timestamp?: string;
+  time?: string;
+  temperature: number;
+  precipitation: number;
+  windSpeed: number;
+  humidity: number;
+  uvIndex?: number;
+  pressure?: number;
+  visibility?: number;
+}
+
 const Index = () => {
   const { toast } = useToast();
   const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
@@ -282,7 +294,18 @@ const Index = () => {
       />
 
       {/* Advanced Options Menu */}
-      <AdvancedOptionsMenu />
+      <AdvancedOptionsMenu
+        location={selectedLocation}
+        onDataFetched={(data) => {
+          // Update page-level state when advanced widget fetches new data
+          setWeatherData(data);
+          try {
+            setSelectedDate(new Date(data.timestamp));
+          } catch (e) {
+            // ignore
+          }
+        }}
+      />
 
       {/* Loading overlay */}
       <AnimatePresence>
