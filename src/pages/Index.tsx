@@ -16,6 +16,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export interface WeatherLocation {
   lat: number;
@@ -206,37 +207,39 @@ const Index = () => {
     minHeight: 200,
   };
 
-  const otherWidgets = [
-    {
-      id: 'weather-likelihood',
-      title: 'Weather Likelihood',
-      component: (
-        <WeatherLikelihood 
+  const interactiveMapWidget = {
+    id: 'interactive-map',
+    title: 'Interactive Map',
+    component: (
+      <ErrorBoundary fallback={<div className="text-red-500">Error loading map. Please check configuration.</div>}>
+        <InteractiveWeatherMap 
           location={selectedLocation}
-          weatherData={weatherData ? [weatherData] : []}
-          isLoading={isLoading}
+          onLocationSelect={handleLocationSelect}
         />
-      ),
-      priority: 10,
-      minHeight: 300,
-    },
+      </ErrorBoundary>
+    )
+  };
+
+  const likelihoodWidget = {
+    id: 'weather-likelihood',
+    title: 'Weather Likelihood',
+    component: (
+      <WeatherLikelihood 
+        location={selectedLocation}
+        weatherData={weatherData ? [weatherData] : []}
+        isLoading={isLoading}
+      />
+    ),
+    priority: 10,
+    minHeight: 300,
+  };
+
+  const otherWidgets = [
     {
       id: 'weather-chart',
       title: 'Weather Trends',
       component: <TimeSeriesChart data={timeSeriesData} selectedVars={["temperature", "precipitation"]} isLoading={isTimeSeriesLoading} />,
       priority: 8,
-      minHeight: 400,
-    },
-    {
-      id: 'weather-map',
-      title: 'Interactive Map',
-      component: (
-        <InteractiveWeatherMap 
-          location={selectedLocation}
-          onLocationSelect={handleLocationSelect}
-        />
-      ),
-      priority: 7,
       minHeight: 400,
     },
   ];
@@ -301,7 +304,7 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <ResponsiveLayout widgets={otherWidgets} />
+            <ResponsiveLayout widgets={[interactiveMapWidget, likelihoodWidget, ...otherWidgets]} />
           </motion.div>
 
           {/* Data Export at Bottom */}
