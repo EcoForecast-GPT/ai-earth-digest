@@ -59,6 +59,7 @@ const Index = () => {
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [predictionProgress, setPredictionProgress] = useState<number | null>(null);
   const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(false);
   const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
@@ -93,65 +94,105 @@ const Index = () => {
     const msInDay = 24*60*60*1000;
     const maxFuture = new Date(today.getTime() + 3*365*msInDay);
     if (selDate > today && selDate <= maxFuture) {
+      setPredictionProgress(0);
+      let progress = 0;
+      let progressTimer: NodeJS.Timeout | null = null;
+      const setProgress = (val: number) => {
+        progress = val;
+        setPredictionProgress(val);
+      };
+      // Timeout after 20 seconds
+      let didTimeout = false;
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          didTimeout = true;
+          reject(new Error('Prediction timed out.'));
+        }, 20000);
+      });
       // If we don't have a full year of data, fetch it first
       const oneYearAgo = new Date(selDate);
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
       const yearStart = oneYearAgo.toISOString().split('T')[0];
       const yearEnd = today.toISOString().split('T')[0];
       let yearData = timeSeriesData;
-      if (!yearData || yearData.length < 300) {
-        try {
-          setIsLoading(true);
-          yearData = await fetchTimeSeriesData({
+      try {
+        setIsLoading(true);
+        setProgress(10);
+        if (!yearData || yearData.length < 300) {
+          // Fetch in background and update progress
+          const fetchPromise = fetchTimeSeriesData({
             lat: selectedLocation.lat,
             lon: selectedLocation.lon,
             startDate: yearStart,
             endDate: yearEnd,
           });
+          // Simulate progress
+          let fakeProgress = 10;
+          progressTimer = setInterval(() => {
+            if (fakeProgress < 70) {
+              fakeProgress += 2 + Math.random() * 3;
+              setProgress(Math.min(fakeProgress, 70));
+            }
+          }, 300);
+          yearData = await Promise.race([fetchPromise, timeoutPromise]);
           setTimeSeriesData(yearData);
-        } catch (e) {
-          setWeatherData(null);
-          setWeatherCondition('sunny');
-          setIsLoading(false);
-          return;
+          if (progressTimer) clearInterval(progressTimer);
+          setProgress(80);
         }
+        // Predict using seasonal pattern: find the closest day-of-year in past year
+        const targetDay = selDate.getMonth() * 31 + selDate.getDate();
+        // Find all past points within +/- 7 days of year
+        const candidates = yearData.filter(d => {
+          const dDate = new Date(d.time);
+          const dDay = dDate.getMonth() * 31 + dDate.getDate();
+          return Math.abs(dDay - targetDay) <= 7;
+        });
+        setProgress(90);
+        // If not enough, fallback to all data
+        const useData = candidates.length > 5 ? candidates : yearData;
+        const avg = (arr, key) => arr.reduce((sum, d) => sum + (d[key] ?? 0), 0) / arr.length;
+        const temperature = avg(useData, 'temperature');
+        const precipitation = avg(useData, 'precipitation');
+        const humidity = avg(useData, 'humidity');
+        const windSpeed = avg(useData, 'windSpeed');
+        // Guess condition based on precipitation/temperature
+        let predCondition = 'sunny';
+        if (precipitation > 5) predCondition = 'rainy';
+        else if (precipitation > 1) predCondition = 'cloudy';
+        else if (temperature > 32) predCondition = 'sunny';
+        else if (temperature < 5) predCondition = 'cloudy';
+        const predicted: WeatherData = {
+          timestamp: selectedDate,
+          temperature,
+          precipitation,
+          humidity,
+          windSpeed,
+          pressure: 1013,
+          visibility: 10,
+          uvIndex: 6,
+          timeSeries: [],
+        };
+        setWeatherData(predicted);
+        setWeatherCondition(predCondition as WeatherCondition);
+        setProgress(100);
+        setTimeout(() => setPredictionProgress(null), 1000);
+        setIsLoading(false);
+        return;
+      } catch (e) {
+        if (progressTimer) clearInterval(progressTimer);
+        setPredictionProgress(null);
+        setWeatherData(null);
+        setWeatherCondition('sunny');
+        setIsLoading(false);
+        if (didTimeout) {
+          toast({
+            title: "Prediction Timeout",
+            description: "Prediction took too long. Try a shorter range or check your connection.",
+            variant: "destructive",
+          });
+        }
+        return;
       }
-      // Predict using seasonal pattern: find the closest day-of-year in past year
-      const targetDay = selDate.getMonth() * 31 + selDate.getDate();
-      // Find all past points within +/- 7 days of year
-      const candidates = yearData.filter(d => {
-        const dDate = new Date(d.time);
-        const dDay = dDate.getMonth() * 31 + dDate.getDate();
-        return Math.abs(dDay - targetDay) <= 7;
-      });
-      // If not enough, fallback to all data
-      const useData = candidates.length > 5 ? candidates : yearData;
-      const avg = (arr, key) => arr.reduce((sum, d) => sum + (d[key] ?? 0), 0) / arr.length;
-      const temperature = avg(useData, 'temperature');
-      const precipitation = avg(useData, 'precipitation');
-      const humidity = avg(useData, 'humidity');
-      const windSpeed = avg(useData, 'windSpeed');
-      // Guess condition based on precipitation/temperature
-      let predCondition = 'sunny';
-      if (precipitation > 5) predCondition = 'rainy';
-      else if (precipitation > 1) predCondition = 'cloudy';
-      else if (temperature > 32) predCondition = 'sunny';
-      else if (temperature < 5) predCondition = 'cloudy';
-      const predicted: WeatherData = {
-        timestamp: selectedDate,
-        temperature,
-        precipitation,
-        humidity,
-        windSpeed,
-        pressure: 1013,
-        visibility: 10,
-        uvIndex: 6,
-        timeSeries: [],
-      };
-      setWeatherData(predicted);
-      setWeatherCondition(predCondition as WeatherCondition);
-      setIsLoading(false);
-      return;
     }
     setIsLoading(true);
     try {
@@ -393,12 +434,27 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <MinimalWeatherMenu
-              location={selectedLocation}
-              temperature={weatherData?.temperature}
-              condition={weatherCondition}
-              isLoading={isLoading}
-            />
+            {predictionProgress !== null ? (
+              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
+                <div className="w-full flex items-center gap-2">
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${predictionProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
+              </div>
+            ) : (
+              <MinimalWeatherMenu
+                location={selectedLocation}
+                temperature={weatherData?.temperature}
+                condition={weatherCondition}
+                isLoading={isLoading}
+              />
+            )}
           </motion.div>
 
           {/* AI Summary - Full Width */}
