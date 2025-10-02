@@ -44,37 +44,87 @@ serve(async (req) => {
 
     console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
 
-    // NASA Data Rods API (GLDAS)
-    // Only daily temperature and precipitation are available, so we synthesize the rest or set as null/unknown
-    const dateString = date ? new Date(date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-    const nasaUrl = `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=NLDAS_FORA0125_H_002:Tair_f_inst&location=GEOM:POINT(${lon},%20${lat})&startDate=${dateString}T00:00:00&endDate=${dateString}T23:59:59&type=asc2`;
-    const response = await fetch(nasaUrl);
+    let openMeteoUrl;
+    const requestedDate = date ? new Date(date) : null;
+    const now = new Date();
+    now.setHours(0,0,0,0);
+
+    if (requestedDate) {
+      requestedDate.setHours(0,0,0,0);
+      const dateString = requestedDate.toISOString().split('T')[0];
+      if (requestedDate >= now) {
+        // Future or today
+        openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=auto&start_date=${dateString}&end_date=${dateString}`;
+      } else {
+        // Past date
+        openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=auto&start_date=${dateString}&end_date=${dateString}`;
+      }
+    } else {
+      // Current weather
+      openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`;
+    }
+    
+    const response = await fetch(openMeteoUrl);
+    
     if (!response.ok) {
-      throw new Error(`NASA Data Rods API error: ${response.status}`);
+      throw new Error(`Open-Meteo API error: ${response.status}`);
     }
-    const rawText = await response.text();
-    // Parse the returned ASCII data
-    const lines = rawText.trim().split('\n');
-    const dataLines = lines.filter(line => !line.startsWith('#') && !line.startsWith('Date'));
-    if (dataLines.length === 0) {
-      throw new Error('No NASA data available for this date/location');
+
+    const data = await response.json();
+    console.log('Open-Meteo response:', JSON.stringify(data));
+
+    let weatherData: WeatherData;
+
+    if (requestedDate) {
+      const daily = data.daily;
+      const temperature = (daily.temperature_2m_max[0] + daily.temperature_2m_min[0]) / 2;
+      const condition = codeToCondition(daily.weather_code[0]);
+
+      weatherData = {
+        temperature: temperature,
+        precipitation: daily.precipitation_sum[0],
+        humidity: 50, // Not available in daily historical data
+        windSpeed: daily.wind_speed_10m_max[0],
+        pressure: 1012, // Not available in daily historical data
+        visibility: 10, // Not available
+        uvIndex: daily.uv_index_max[0],
+        condition: condition
+      };
+    } else {
+      const current = data.current;
+      const daily = data.daily;
+      const temperature = current.temperature_2m;
+      const humidity = current.relative_humidity_2m;
+      const weatherCode = current.weather_code;
+      let visibility = 10;
+      if (weatherCode >= 45 && weatherCode <= 48) visibility = 2; // fog
+      else if (weatherCode >= 51 && weatherCode <= 67) visibility = 5; // rain
+      else if (weatherCode >= 71 && weatherCode <= 77) visibility = 3; // snow
+      else if (weatherCode >= 80 && weatherCode <= 99) visibility = 4; // showers/thunderstorms
+      else if (humidity > 85) visibility = 7;
+
+      let condition = codeToCondition(weatherCode);
+      if ((condition === 'sunny' || condition === 'very sunny') && humidity > 70) {
+        condition = 'partly cloudy';
+      }
+      if (condition === 'sunny' && daily.uv_index_max[0] > 8 && temperature > 25) {
+        condition = 'very sunny';
+      }
+
+      weatherData = {
+        temperature: temperature,
+        precipitation: current.precipitation || 0,
+        humidity: humidity,
+        windSpeed: current.wind_speed_10m,
+        pressure: current.surface_pressure,
+        visibility: visibility,
+        uvIndex: daily.uv_index_max[0] || 5,
+        condition: condition
+      };
     }
-    // Use the first data line for the day
-    const tokens = dataLines[0].split(/\s+/);
-    const timestamp = tokens[0];
-    const tempK = parseFloat(tokens[1]);
-    const temperature = isNaN(tempK) ? null : tempK - 273.15;
-    // Precipitation is not available in this variable, so set to null
-    const weatherData: WeatherData = {
-      temperature: temperature ?? 0,
-      precipitation: 0, // Not available from NASA Data Rods (GLDAS Tair_f_inst)
-      humidity: 0,      // Not available
-      windSpeed: 0,     // Not available
-      pressure: 0,      // Not available
-      visibility: 0,    // Not available
-      uvIndex: 0,       // Not available
-      condition: 'sunny' // NASA does not provide condition, so default
-    };
+
+    console.log('Processed weather data:', weatherData);
+
     return new Response(
       JSON.stringify(weatherData),
       { 
