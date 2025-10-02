@@ -33,6 +33,8 @@ const TimeSeriesChart = ({
   isLoading,
   error,
 }: TimeSeriesChartProps) => {
+  // Debug: show incoming data in console to verify what chart receives
+  console.debug('TimeSeriesChart props:', { length: data?.length, selectedVars, sample: data?.slice(0,5) });
   const getVariableColor = (variable: string) => {
     const colors: { [key: string]: string } = {
       temperature: "hsl(var(--primary))",
@@ -54,8 +56,12 @@ const TimeSeriesChart = ({
   };
 
   const formatXAxis = (tickItem: string) => {
-    // Assuming tickItem is an ISO string, format to HH:MM
-    return new Date(tickItem).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // If the timestamp is exactly midnight UTC, show date instead (daily series)
+    const d = new Date(tickItem);
+    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+      return d.toLocaleDateString('en-US');
+    }
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   if (isLoading) {

@@ -141,6 +141,7 @@ const Index = () => {
           endDate: endDate.toISOString().split("T")[0],
         });
         setTimeSeriesData(data);
+        console.debug('Time series data set in Index:', data.slice(0, 10));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({
