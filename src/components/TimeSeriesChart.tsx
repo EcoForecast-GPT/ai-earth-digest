@@ -33,6 +33,11 @@ const TimeSeriesChart = ({
   isLoading,
   error,
 }: TimeSeriesChartProps) => {
+  // Debug: show incoming data in console to verify what chart receives
+  console.debug('TimeSeriesChart props:', { length: data?.length, selectedVars, sample: data?.slice(0,5) });
+  // Defensive guards
+  const safeData: TimeSeriesDataPoint[] = Array.isArray(data) ? data : [];
+  const safeSelectedVars: string[] = Array.isArray(selectedVars) && selectedVars.length > 0 ? selectedVars : ['temperature'];
   const getVariableColor = (variable: string) => {
     const colors: { [key: string]: string } = {
       temperature: "hsl(var(--primary))",
@@ -54,8 +59,12 @@ const TimeSeriesChart = ({
   };
 
   const formatXAxis = (tickItem: string) => {
-    // Assuming tickItem is an ISO string, format to HH:MM
-    return new Date(tickItem).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // If the timestamp is exactly midnight UTC, show date instead (daily series)
+    const d = new Date(tickItem);
+    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+      return d.toLocaleDateString('en-US');
+    }
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   if (isLoading) {
@@ -127,25 +136,42 @@ const TimeSeriesChart = ({
               axisLine={false}
               tickFormatter={formatXAxis}
             />
-            <YAxis
-              yAxisId="left"
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `${value}${getVariableUnit(selectedVars[0])}`}
-            />
-            {selectedVars.length > 1 && (
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${value}${getVariableUnit(selectedVars[1])}`}
-              />
-            )}
+            {/* Compute axis domains so both lines are visible when scale differs */}
+            {(() => {
+              const leftVar = safeSelectedVars[0];
+              const rightVar = safeSelectedVars[1];
+              // Compute max using safeData and safe access
+              const leftValues = safeData.map(d => (d as any)[leftVar]).filter(v => typeof v === 'number') as number[];
+              const rightValues = rightVar ? safeData.map(d => (d as any)[rightVar]).filter(v => typeof v === 'number') as number[] : [];
+              const leftMax = leftValues.length > 0 ? Math.max(...leftValues.map(Math.abs)) : 1;
+              const rightMax = rightValues.length > 0 ? Math.max(...rightValues.map(Math.abs)) : undefined;
+
+              return (
+                <>
+                  <YAxis
+                    yAxisId="left"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${value}${getVariableUnit(leftVar)}`}
+                    domain={[Math.min(0, -leftMax * 0.2), leftMax * 1.2]}
+                  />
+                  {rightVar && (
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${value}${getVariableUnit(rightVar)}`}
+                      domain={[0, (rightMax ?? 1) * 1.2]}
+                    />
+                  )}
+                </>
+              );
+            })()}
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--background))",
@@ -156,7 +182,7 @@ const TimeSeriesChart = ({
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
             
-            {selectedVars.map((variable, index) => (
+            {safeSelectedVars.map((variable, index) => (
               <Line
                 key={variable}
                 yAxisId={index === 0 ? "left" : "right"}

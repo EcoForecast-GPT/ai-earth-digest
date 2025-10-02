@@ -1,6 +1,12 @@
-// Weather Service using Supabase Edge Function
-const SUPABASE_URL = "https://qxlcgekggsojggybchcz.supabase.co";
-const WEATHER_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/get-weather`;
+// Weather Service using Supabase Edge Function. Read the URL from environment so it works in deployment.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL) {
+  throw new Error('SUPABASE_URL not found in environment.');
+}
+
+const WEATHER_FUNCTION_URL = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/get-weather`;
 
 export interface NASAWeatherData {
   temperature: number;
@@ -16,18 +22,19 @@ export interface NASAWeatherData {
 export const fetchNASAWeatherData = async (
   lat: number,
   lon: number,
-  startDate: string,
-  endDate: string
+  date?: string
 ): Promise<NASAWeatherData> => {
   try {
-    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}`);
+    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
     
     const response = await fetch(WEATHER_FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ lat, lon })
+      body: JSON.stringify({ lat, lon, date })
     });
 
     if (!response.ok) {

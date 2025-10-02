@@ -17,6 +17,8 @@ import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import DebugPanel from "@/components/DebugPanel";
+import WeatherControls from "@/components/WeatherControls";
 
 export interface WeatherLocation {
   lat: number;
@@ -48,30 +50,31 @@ const Index = () => {
   const { toast } = useToast();
   const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
-    lat: 40.7128,
-    lon: -74.0060,
-    name: "New York, NY"
+    lat: 25.276987,
+    lon: 55.296249,
+    name: "Dubai, UAE"
   });
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDateTime, setSelectedDateTime] = useState<string>(new Date().toISOString());
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("sunny");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(false);
   const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  const handleDateTimeChange = (datetime: string) => {
+    setSelectedDateTime(datetime);
+  };
 
   // Fetch single-point weather data
   const fetchWeatherData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const startDate = selectedDate.toISOString().split('T')[0];
-      const endDate = selectedDate.toISOString().split('T')[0];
-      
       const nasaData = await fetchNASAWeatherData(
         selectedLocation.lat,
         selectedLocation.lon,
-        startDate,
-        endDate
+        selectedDateTime
       );
       
       // Generate time series data based on NASA data
@@ -84,7 +87,7 @@ const Index = () => {
       }));
 
       const data: WeatherData = {
-        timestamp: selectedDate.toISOString(),
+        timestamp: selectedDateTime,
         temperature: nasaData.temperature,
         precipitation: nasaData.precipitation,
         humidity: nasaData.humidity,
@@ -118,7 +121,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLocation, selectedDate, toast]);
+  }, [selectedLocation, selectedDateTime, toast]);
 
   // Fetch time-series data for the chart
   useEffect(() => {
@@ -128,7 +131,7 @@ const Index = () => {
       setIsTimeSeriesLoading(true);
       setTimeSeriesError(null);
       try {
-        const endDate = selectedDate;
+        const endDate = new Date(selectedDateTime);
         const startDate = new Date(endDate);
         startDate.setDate(endDate.getDate() - 7); // Fetch last 7 days
 
@@ -139,6 +142,7 @@ const Index = () => {
           endDate: endDate.toISOString().split("T")[0],
         });
         setTimeSeriesData(data);
+        console.debug('Time series data set in Index:', data.slice(0, 10));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({
@@ -154,12 +158,12 @@ const Index = () => {
     };
 
     fetchChartData();
-  }, [selectedLocation, selectedDate, toast]);
+  }, [selectedLocation, selectedDateTime, toast]);
 
   // Auto-fetch weather data when location or date changes
   useEffect(() => {
     fetchWeatherData();
-  }, [selectedLocation, selectedDate, fetchWeatherData]);
+  }, [selectedLocation, selectedDateTime, fetchWeatherData]);
 
   // Update location when auto-location is available - only once per location change
   useEffect(() => {
@@ -238,6 +242,22 @@ const Index = () => {
     minHeight: 300,
   };
 
+  const weatherControlsWidget = {
+    id: 'weather-controls',
+    title: 'Controls',
+    component: (
+      <WeatherControls
+        location={selectedLocation}
+        onLocationChange={handleLocationSelect}
+        dateTime={selectedDateTime}
+        onDateTimeChange={handleDateTimeChange}
+        isLoading={isLoading}
+        onFetch={fetchWeatherData}
+        weatherData={weatherData ? [weatherData] : []}
+      />
+    )
+  };
+
   const otherWidgets = [
     {
       id: 'weather-trends',
@@ -307,13 +327,19 @@ const Index = () => {
             {aiSummaryWidget.component}
           </motion.div>
 
+          <div className="flex justify-end mb-2">
+            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
+          </div>
+
+          {showDebug && <DebugPanel />}
+
           {/* Responsive Widget Layout */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <ResponsiveLayout widgets={[interactiveMapWidget, likelihoodWidget, ...otherWidgets]} />
+            <ResponsiveLayout widgets={[weatherControlsWidget, interactiveMapWidget, likelihoodWidget, ...otherWidgets]} />
           </motion.div>
 
           {/* Data Export at Bottom */}
@@ -327,7 +353,7 @@ const Index = () => {
               <DataExport 
                 weatherData={[weatherData]}
                 location={selectedLocation}
-                dateRange={{ start: selectedDate.toISOString().split('T')[0], end: selectedDate.toISOString().split('T')[0] }}
+                dateRange={{ start: selectedDateTime.split('T')[0], end: selectedDateTime.split('T')[0] }}
               />
             </motion.div>
           )}
