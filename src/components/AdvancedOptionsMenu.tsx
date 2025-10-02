@@ -42,7 +42,7 @@ const AdvancedOptionsMenu: React.FC<AdvancedOptionsMenuProps> = ({ location, onD
         datePart
       );
 
-      // Create a single timepoint from NASA data
+      // Use NASA data directly as a single timepoint
       const timePoint = {
         timestamp: new Date(selectedDateTime).toISOString(),
         time: new Date(selectedDateTime).toLocaleTimeString(),

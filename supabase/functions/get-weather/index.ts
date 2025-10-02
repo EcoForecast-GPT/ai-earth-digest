@@ -37,18 +37,26 @@ serve(async (req) => {
     const { date } = await req.json();
     const targetDate = date || new Date().toISOString().split('T')[0];
     
-    // Use Open-Meteo historical weather API for past dates, forecast for future
-    const isPastDate = new Date(targetDate) < new Date();
-    const baseUrl = isPastDate 
-      ? 'https://archive-api.open-meteo.com/v1/archive'
-      : 'https://api.open-meteo.com/v1/forecast';
-      
-    const openMeteoUrl = isPastDate
-      ? `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${targetDate}&end_date=${targetDate}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`
-      : `${baseUrl}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`;
+    // Use NASA POWER API for all weather data
+    const nasaPowerUrl = 'https://power.larc.nasa.gov/api/temporal/hourly/point';
+    const params = {
+      parameters: 'T2M,PRECTOT,RH2M,WS2M,PS,ALLSKY_SFC_SW_DWN',
+      community: 'RE',
+      longitude: lon,
+      latitude: lat,
+      start: targetDate,
+      end: targetDate,
+      format: 'JSON'
+    };
+
+    const nasaUrl = `${nasaPowerUrl}?${new URLSearchParams(params)}`;
+    console.log(`Fetching NASA POWER data from: ${nasaUrl}`);
     
-    console.log(`Fetching weather from: ${openMeteoUrl}`);
-    const response = await fetch(openMeteoUrl);
+    const response = await fetch(nasaUrl, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
     
     if (!response.ok) {
       throw new Error(`Open-Meteo API error: ${response.status}`);
@@ -60,81 +68,74 @@ serve(async (req) => {
 
     console.log('Open-Meteo response:', JSON.stringify(data));
 
-    // Extract weather data based on response type (historical vs current)
-    let temperature, humidity, precipitation, windSpeed, pressure, uvIndex, weatherCode;
+    // Extract weather data from NASA POWER response
+    const nasaData = data.properties;
+    const targetHour = new Date(targetDate).getHours();
     
-    if (isPastDate && data.hourly) {
-      // For historical data, use the specified hour or default to noon
-      const hour = (new Date(targetDate).getHours() || 12) % 24;
-      const idx = hour;
-      
-      temperature = data.hourly.temperature_2m[idx];
-      humidity = data.hourly.relative_humidity_2m[idx];
-      precipitation = data.hourly.precipitation[idx] || 0;
-      windSpeed = data.hourly.wind_speed_10m[idx];
-      pressure = data.hourly.surface_pressure[idx];
-      uvIndex = daily.uv_index_max[0] || 5;
-      weatherCode = data.hourly.weather_code[idx];
-      
-      console.log(`Using historical data for hour ${hour}:`, {
-        temperature,
-        humidity,
-        precipitation,
-        windSpeed,
-        pressure,
-        uvIndex,
-        weatherCode
-      });
-    } else {
-      // Current weather data
-      temperature = current.temperature_2m;
-      humidity = current.relative_humidity_2m;
-      precipitation = current.precipitation || 0;
-      windSpeed = current.wind_speed_10m;
-      pressure = current.surface_pressure;
-      uvIndex = daily.uv_index_max[0] || 5;
-      weatherCode = current.weather_code;
-    }
+    // Get data for the specific hour
+    const temperature = nasaData.parameter.T2M[targetHour] - 273.15; // Convert K to C
+    const humidity = nasaData.parameter.RH2M[targetHour];
+    const precipitation = nasaData.parameter.PRECTOT[targetHour];
+    const windSpeed = nasaData.parameter.WS2M[targetHour];
+    const pressure = nasaData.parameter.PS[targetHour];
+    const solarRadiation = nasaData.parameter.ALLSKY_SFC_SW_DWN[targetHour];
+    
+    // Calculate UV index from solar radiation
+    const uvIndex = Math.min(11, Math.round(solarRadiation / 50));
+    
+    // Determine weather condition from NASA parameters
+    const condition = determineConditionFromNASA({
+      temp: temperature,
+      humidity,
+      precip: precipitation,
+      wind: windSpeed,
+      solar: solarRadiation
+    });
 
-    // Calculate visibility based on weather conditions
+    // Calculate visibility based on NASA parameters
     let visibility = 10;
-    if (weatherCode >= 45 && weatherCode <= 48) visibility = 2; // fog
-    else if (weatherCode >= 51 && weatherCode <= 67) visibility = 5; // rain
-    else if (weatherCode >= 71 && weatherCode <= 77) visibility = 3; // snow
-    else if (weatherCode >= 80 && weatherCode <= 99) visibility = 4; // showers/thunderstorms
-    else if (humidity > 85) visibility = 7;
+    if (precipitation > 10) visibility = 4; // Heavy rain
+    else if (precipitation > 5) visibility = 6; // Moderate rain
+    else if (precipitation > 0) visibility = 8; // Light rain
+    else if (humidity > 85) visibility = 7; // High humidity
+    else if (solarRadiation < 100) visibility = 5; // Cloudy
 
-    // Determine condition based on weather code and metrics
-    let condition: WeatherData['condition'] = 'sunny';
-    
-    // WMO Weather interpretation codes
-    if (weatherCode >= 95 && weatherCode <= 99) {
-      condition = 'stormy'; // Thunderstorm
-    } else if (weatherCode >= 80 && weatherCode <= 82) {
-      condition = 'rainy'; // Rain showers
-    } else if (weatherCode >= 61 && weatherCode <= 67) {
-      condition = 'rainy'; // Rain
-    } else if (weatherCode >= 51 && weatherCode <= 57) {
-      condition = 'rainy'; // Drizzle
-    } else if (weatherCode >= 3) {
-      condition = 'very cloudy'; // Overcast
-    } else if (weatherCode === 2) {
-      condition = 'cloudy'; // Partly cloudy
-    } else if (weatherCode === 1) {
-      condition = 'partly cloudy'; // Mainly clear
-    } else if (weatherCode === 0) {
-      // Clear sky - determine if very sunny based on UV and temp
-      if (uvIndex > 8 && temperature > 25) {
-        condition = 'very sunny';
-      } else {
-        condition = 'sunny';
-      }
+    // Helper function to determine weather condition from NASA parameters
+    function determineConditionFromNASA(params: {
+      temp: number;
+      humidity: number;
+      precip: number;
+      wind: number;
+      solar: number;
+    }): WeatherData['condition'] {
+      const { temp, humidity, precip, wind, solar } = params;
+      
+      // Storm conditions
+      if (wind > 20 && precip > 10) return 'stormy';
+      if (precip > 15) return 'stormy';
+      
+      // Rain conditions
+      if (precip > 5) return 'rainy';
+      if (precip > 0) return 'partly cloudy';
+      
+      // Cloud conditions based on solar radiation and humidity
+      if (solar < 100 || humidity > 85) return 'very cloudy';
+      if (solar < 300 || humidity > 70) return 'cloudy';
+      if (solar < 500) return 'partly cloudy';
+      
+      // Clear conditions
+      if (solar > 800 && temp > 25) return 'very sunny';
+      return 'sunny';
     }
 
-    // Additional refinement based on humidity
-    if (condition === 'sunny' || condition === 'very sunny') {
-      if (humidity > 70) condition = 'partly cloudy';
-    }
+    // Get condition from NASA data
+    const weatherCondition = determineConditionFromNASA({
+      temp: temperature,
+      humidity,
+      precip: precipitation,
+      wind: windSpeed,
+      solar: solarRadiation
+    });
 
     const weatherData: WeatherData = {
       temperature,
@@ -144,7 +145,7 @@ serve(async (req) => {
       pressure,
       visibility,
       uvIndex,
-      condition
+      condition: weatherCondition
     };
 
     console.log('Processed weather data:', weatherData);
