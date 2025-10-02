@@ -26,7 +26,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
   const [mapError, setMapError] = useState<string | null>(null);
   const [activeLayer, setActiveLayer] = useState('MODIS_Terra_CorrectedReflectance_TrueColor');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [maptilerApiKey, setMaptilerApiKey] = useState<string | null>(null);
+  // No MapTiler API key required — we'll use NASA GIBS tiles as the base layer.
 
   // Weather layers configuration
   const weatherLayers = [
@@ -35,21 +35,11 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     { id: 'AMSRE_Surface_Rain_Rate_Day', name: 'Precipitation', icon: CloudRain, color: 'text-cyan-400' },
   ];
 
-  // Get API key on client
-  useEffect(() => {
-    const key = import.meta.env.VITE_MAPTILER_API_KEY ?? import.meta.env.NEXT_PUBLIC_MAPTILER_API_KEY;
-    setMaptilerApiKey(key ?? null);
-  }, []);
+  // No client-side API key required for NASA GIBS tiles.
 
   // Initialize MapLibre with MapTiler
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
-    if (!maptilerApiKey) {
-      // Fail fast with a clear error so the UI shows a message instead of a perpetual loader.
-      setMapError("Configuration Error: MapTiler API key is missing. Please check your environment variables.");
-      setIsLoaded(true);
-      return;
-    }
 
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {
@@ -93,9 +83,18 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
           return;
         }
 
+        // Initialize with a minimal inlined style and no external basemap provider.
+        // We'll add NASA GIBS raster tiles as the primary base layer.
+        const minimalStyle = {
+          version: 8,
+          name: 'gibs-base-style',
+          sources: {},
+          layers: [],
+        };
+
         map.current = new maplibregl.Map({
           container: mapContainer.current!,
-          style: `https://api.maptiler.com/maps/hybrid/style.json?key=${maptilerApiKey}`,
+          style: minimalStyle as any,
           center: [location.lon, location.lat],
           zoom: 4,
           antialias: true,
@@ -107,6 +106,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
 
         map.current.on('load', () => {
           setIsLoaded(true);
+          // Add the GIBS layer immediately as the base layer
           addWeatherLayer();
           addLocationMarker();
         });
@@ -189,18 +189,10 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     }
   }, [activeLayer, currentDate, isLoaded]);
 
-  const fetchLocationName = async (lat: number, lon: number) => {
-    if (!maptilerApiKey) return;
-    try {
-      const response = await fetch(`https://api.maptiler.com/geocoding/${lon},${lat}.json?key=${maptilerApiKey}`);
-      const data = await response.json();
-      const locationName = data.features[0]?.place_name || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
-      onLocationSelect({ lat, lon, name: locationName });
-    } catch (error) {
-      console.error('Geocoding failed:', error);
+    const fetchLocationName = async (lat: number, lon: number) => {
+      // No external geocoding service configured — fallback to coordinates.
       onLocationSelect({ lat, lon, name: `${lat.toFixed(2)}, ${lon.toFixed(2)}` });
-    }
-  };
+    };
 
   const switchWeatherLayer = (layerId: string, date: Date) => {
     setActiveLayer(layerId);
