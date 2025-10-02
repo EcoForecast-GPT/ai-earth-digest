@@ -2,11 +2,11 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Download, FileText, Database } from 'lucide-react';
-import { TimePoint, WeatherLocation } from '@/pages/Index';
+import { WeatherData, WeatherLocation } from '@/pages/Index';
 import { useToast } from '@/hooks/use-toast';
 
 interface DataExportProps {
-  weatherData: TimePoint[];
+  weatherData: WeatherData[];
   location: WeatherLocation;
   dateRange: { start: string; end: string };
 }

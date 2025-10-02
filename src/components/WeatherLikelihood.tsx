@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
-import { TimePoint, WeatherLocation } from '@/pages/Index';
+import { WeatherData, WeatherLocation } from '@/pages/Index';
 import { Thermometer, Wind, CloudRain, Droplets, AlertTriangle } from 'lucide-react';
 
 interface WeatherLikelihoodProps {
   location: WeatherLocation;
-  weatherData: TimePoint[];
+  weatherData: WeatherData[];
   isLoading: boolean;
 }
 

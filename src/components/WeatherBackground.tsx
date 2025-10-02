@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TimePoint } from '@/pages/Index';
+import { WeatherData } from '@/pages/Index';
 
 interface WeatherBackgroundProps {
-  weatherData: TimePoint[];
+  weatherData: WeatherData[];
   className?: string;
 }
 

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { WeatherLocation, TimePoint } from "@/pages/Index";
+import { WeatherLocation, WeatherData } from "@/pages/Index";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 interface AISummaryCardProps {
   location: WeatherLocation;
-  weatherData: TimePoint[];
+  weatherData: WeatherData[];
   isLoading: boolean;
 }
 

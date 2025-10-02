@@ -20,18 +20,14 @@ export const fetchNASAWeatherData = async (
   endDate: string
 ): Promise<NASAWeatherData> => {
   try {
-    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${startDate}`);
+    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}`);
     
     const response = await fetch(WEATHER_FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        lat, 
-        lon,
-        date: startDate // Pass the date for historical lookups
-      })
+      body: JSON.stringify({ lat, lon })
     });
 
     if (!response.ok) {

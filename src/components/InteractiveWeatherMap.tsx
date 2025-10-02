@@ -1,29 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Map, Layers, Navigation, Thermometer, Wind, CloudRain, Eye } from 'lucide-react';
+import { Map, Layers, Thermometer, CloudRain, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { getGibsTileUrl } from '@/services/nasaEarthdataService';
+import { format } from 'date-fns';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 interface WeatherMapProps {
   location: { lat: number; lon: number; name: string };
   onLocationSelect: (location: { lat: number; lon: number; name: string }) => void;
 }
 
-const MAPTILER_API_KEY = 'GlbLuLlMNruYspOH4MNV';
+const MAPTILER_API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 
 export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [activeLayer, setActiveLayer] = useState('temperature');
-  const [weatherData, setWeatherData] = useState<any>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [activeLayer, setActiveLayer] = useState('MODIS_Terra_CorrectedReflectance_TrueColor');
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
   // Weather layers configuration
   const weatherLayers = [
-    { id: 'temperature', name: 'Temperature', icon: Thermometer, color: 'text-red-400' },
-    { id: 'wind', name: 'Wind', icon: Wind, color: 'text-cyan-400' },
-    { id: 'precipitation', name: 'Rain', icon: CloudRain, color: 'text-blue-400' },
-    { id: 'visibility', name: 'Visibility', icon: Eye, color: 'text-purple-400' },
+    { id: 'MODIS_Terra_CorrectedReflectance_TrueColor', name: 'Visible Imagery', icon: Eye, color: 'text-blue-400' },
+    { id: 'MODIS_Terra_Land_Surface_Temp_Day', name: 'Temperature', icon: Thermometer, color: 'text-red-400' },
+    { id: 'AMSRE_Surface_Rain_Rate_Day', name: 'Precipitation', icon: CloudRain, color: 'text-cyan-400' },
   ];
 
   // Initialize MapLibre with MapTiler
@@ -33,6 +43,12 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     // Dynamically load MapLibre GL JS
     const loadMapLibre = async () => {
       try {
+        if (!MAPTILER_API_KEY) {
+          setMapError("Configuration Error: MapTiler API key is missing. Please check your environment variables.");
+          setIsLoaded(true);
+          return;
+        }
+
         // Add CSS
         const link = document.createElement('link');
         link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
@@ -43,9 +59,14 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         const script = document.createElement('script');
         script.src = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
         script.onload = initializeMap;
+        script.onerror = () => {
+            setMapError("Failed to load the map library. Please check your network connection or ad blocker settings.");
+            setIsLoaded(true);
+        };
         document.head.appendChild(script);
       } catch (error) {
         console.error('Failed to load MapLibre:', error);
+        setMapError(`An unexpected error occurred while loading the map. Details: ${error instanceof Error ? error.message : String(error)}`);
         setIsLoaded(true); // Show fallback
       }
     };
@@ -56,6 +77,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         const maplibregl = window.maplibregl;
         
         if (!maplibregl) {
+          setMapError("Map library did not initialize correctly.");
           setIsLoaded(true);
           return;
         }
@@ -64,13 +86,17 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
           container: mapContainer.current!,
           style: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_API_KEY}`,
           center: [location.lon, location.lat],
-          zoom: 8,
+          zoom: 4,
           antialias: true,
+        });
+
+        map.current.on('error', (e: any) => {
+            setMapError(`Map Error: ${e.error?.message || 'An unknown map error occurred.'}`);
         });
 
         map.current.on('load', () => {
           setIsLoaded(true);
-          addWeatherLayers();
+          addWeatherLayer();
           addLocationMarker();
         });
 
@@ -81,24 +107,26 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
 
       } catch (error) {
         console.error('Map initialization failed:', error);
+        setMapError(`Map initialization failed. Details: ${error instanceof Error ? error.message : String(error)}`);
         setIsLoaded(true);
       }
     };
 
-    const addWeatherLayers = () => {
-      // Add OpenWeatherMap weather layers
-      const weatherSources = {
-        temperature: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        wind: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        precipitation: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-        visibility: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`,
-      };
+    const addWeatherLayer = () => {
+      if (!map.current) return;
+      const formattedDate = format(currentDate, 'yyyy-MM-dd');
+      const tileUrl = getGibsTileUrl(activeLayer, formattedDate);
 
-      // Note: In production, you'd need a valid OpenWeatherMap API key
-      // For demo, we'll create mock weather overlay
+      if (map.current.getLayer('weather-layer')) {
+        map.current.removeLayer('weather-layer');
+      }
+      if (map.current.getSource('weather-overlay')) {
+        map.current.removeSource('weather-overlay');
+      }
+
       map.current.addSource('weather-overlay', {
         type: 'raster',
-        tiles: [weatherSources[activeLayer as keyof typeof weatherSources]],
+        tiles: [tileUrl],
         tileSize: 256,
       });
 
@@ -107,7 +135,7 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
         type: 'raster',
         source: 'weather-overlay',
         paint: {
-          'raster-opacity': 0.6,
+          'raster-opacity': 0.7,
         },
       });
     };
@@ -120,14 +148,13 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
       const el = document.createElement('div');
       el.className = 'location-marker';
       el.style.cssText = `
-        width: 30px;
-        height: 30px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
-        background: linear-gradient(135deg, hsl(180 100% 50%), hsl(150 100% 45%));
+        background: #3498db;
         border: 3px solid white;
-        box-shadow: 0 0 20px hsl(180 100% 50% / 0.6);
+        box-shadow: 0 0 15px rgba(52, 152, 219, 0.7);
         cursor: pointer;
-        animation: pulse 2s infinite;
       `;
 
       new maplibregl.Marker(el)
@@ -145,58 +172,63 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     };
   }, []);
 
+  useEffect(() => {
+    if (isLoaded && map.current) {
+      switchWeatherLayer(activeLayer, currentDate);
+    }
+  }, [activeLayer, currentDate, isLoaded]);
+
   const fetchLocationName = async (lat: number, lon: number) => {
     try {
-      // Mock reverse geocoding - in production use a real service
-      const cityNames = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia'];
-      const randomCity = cityNames[Math.floor(Math.random() * cityNames.length)];
-      
-      onLocationSelect({
-        lat: lat,
-        lon: lon,
-        name: `${randomCity}, USA`
-      });
+      const response = await fetch(`https://api.maptiler.com/geocoding/${lon},${lat}.json?key=${MAPTILER_API_KEY}`);
+      const data = await response.json();
+      const locationName = data.features[0]?.place_name || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+      onLocationSelect({ lat, lon, name: locationName });
     } catch (error) {
       console.error('Geocoding failed:', error);
-      onLocationSelect({
-        lat: lat,
-        lon: lon,
-        name: `${lat.toFixed(2)}, ${lon.toFixed(2)}`
-      });
+      onLocationSelect({ lat, lon, name: `${lat.toFixed(2)}, ${lon.toFixed(2)}` });
     }
   };
 
-  const switchWeatherLayer = (layerId: string) => {
+  const switchWeatherLayer = (layerId: string, date: Date) => {
     setActiveLayer(layerId);
-    if (map.current && map.current.getLayer('weather-layer')) {
-      // Update the weather layer source
-      map.current.removeLayer('weather-layer');
-      map.current.removeSource('weather-overlay');
-      
-      // Add new layer (simplified for demo)
-      setTimeout(() => {
-        if (map.current) {
-          map.current.addSource('weather-overlay', {
-            type: 'raster',
-            tiles: [`https://tile.openweathermap.org/map/${layerId}_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY`],
-            tileSize: 256,
-          });
+    if (map.current && map.current.isStyleLoaded()) {
+        const formattedDate = format(date, 'yyyy-MM-dd');
+        const tileUrl = getGibsTileUrl(layerId, formattedDate);
 
-          map.current.addLayer({
-            id: 'weather-layer',
-            type: 'raster',
-            source: 'weather-overlay',
-            paint: {
-              'raster-opacity': 0.6,
-            },
-          });
+        const source = map.current.getSource('weather-overlay');
+        if (source) {
+            // @ts-ignore
+            source.setTiles([tileUrl]);
+            // Force a refresh of the tile cache
+            map.current.style.sourceCaches['weather-overlay'].clearTiles();
+            map.current.style.sourceCaches['weather-overlay'].update(map.current.transform);
+            map.current.triggerRepaint();
         }
-      }, 100);
     }
   };
 
   // Fallback UI if map fails to load
-  if (!isLoaded && map.current === null) {
+  if (mapError) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="h-full glass-card rounded-lg p-6 flex flex-col items-center justify-center text-center"
+        >
+            <div className="text-red-400 mb-4">
+                <Map size={48} />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Map Unavailable</h3>
+            <p className="text-gray-400 text-sm mb-4">The interactive map could not be loaded.</p>
+            <div className="bg-red-900/20 border border-red-500/30 rounded-md p-3 text-left text-xs text-red-300">
+                <p className="font-mono">{mapError}</p>
+            </div>
+        </motion.div>
+    );
+  }
+
+  if (!isLoaded) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -283,5 +315,65 @@ export const InteractiveWeatherMap = ({ location, onLocationSelect }: WeatherMap
     );
   }
 
-  return null; // Map will render in the container
+  return (
+    <motion.div 
+      className="w-full h-96 relative rounded-2xl overflow-hidden shadow-2xl bg-slate-900"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div ref={mapContainer} className="w-full h-full" />
+      
+      <div className="absolute top-3 left-3 flex flex-col gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={'outline'}
+              className={cn(
+                'w-[200px] justify-start text-left font-normal bg-slate-800/80 hover:bg-slate-700/90 border-slate-700 text-white',
+                !currentDate && 'text-muted-foreground'
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {currentDate ? format(currentDate, 'PPP') : <span>Pick a date</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 bg-slate-800 border-slate-700">
+            <Calendar
+              mode="single"
+              selected={currentDate}
+              onSelect={(date) => date && setCurrentDate(date)}
+              initialFocus
+              className="text-white"
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-sm p-2 rounded-full border border-slate-700">
+        {weatherLayers.map((layer) => (
+          <Button
+            key={layer.id}
+            variant="ghost"
+            size="sm"
+            onClick={() => switchWeatherLayer(layer.id, currentDate)}
+            className={`flex items-center gap-2 rounded-full transition-all duration-300 ${
+              activeLayer === layer.id
+                ? 'bg-blue-500 text-white'
+                : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+            }`}
+          >
+            <layer.icon className={`h-5 w-5 ${activeLayer === layer.id ? '' : layer.color}`} />
+            <span className="hidden sm:inline">{layer.name}</span>
+          </Button>
+        ))}
+      </div>
+
+      <div className="absolute top-3 right-3">
+        <Badge variant="secondary" className="bg-slate-800/80 text-slate-300 border-slate-700">
+          {location.name}
+        </Badge>
+      </div>
+    </motion.div>
+  );
 };
