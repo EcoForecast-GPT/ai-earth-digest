@@ -2,8 +2,12 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase URL and Anon Key must be provided.");
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
