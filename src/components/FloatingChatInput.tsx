@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [chatResponse, setChatResponse] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close when clicking outside
@@ -43,10 +44,11 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
     setIsLoading(true);
     // Simulate API call
     setTimeout(() => {
-      generateWeatherResponse(input);
+      const response = generateWeatherResponse(input);
+      setChatResponse(response);
       setInput('');
       setIsLoading(false);
-      setIsExpanded(false); // Collapse after sending
+      // Keep it expanded to show the response
     }, 800);
   };
 
@@ -55,6 +57,11 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleFocus = () => {
+    setIsExpanded(true);
+    setChatResponse(''); // Clear response when user starts typing again
   };
 
   const widthVariants = {
@@ -71,30 +78,48 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className="fixed bottom-6 left-0 right-0 w-full mx-auto px-4 z-50"
     >
-      <div className="glass-panel rounded-full shadow-2xl border border-primary/30 overflow-hidden backdrop-blur-xl hover:border-primary/50 transition-all duration-300">
-        <div className="flex items-center gap-2 p-2">
-          {!isExpanded && (
-            <div className="flex items-center gap-2 pl-2 pr-1 text-muted-foreground/80">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">Ask AI</span>
-            </div>
+      <div className="relative">
+        <AnimatePresence>
+          {chatResponse && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="absolute bottom-full left-0 right-0 mb-3"
+            >
+              <div className="glass-panel rounded-xl p-3 text-sm shadow-lg border border-primary/20">
+                {chatResponse}
+              </div>
+            </motion.div>
           )}
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            onFocus={() => setIsExpanded(true)}
-            placeholder={isExpanded ? "Ask about temperature, rain, wind..." : ""}
-            className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60"
-          />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            size="icon"
-            className="rounded-full h-9 w-9 bg-primary hover:bg-primary/90 transition-all duration-300 hover:scale-105 disabled:opacity-50"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+        </AnimatePresence>
+
+        <div className="glass-panel rounded-full shadow-2xl border border-primary/30 overflow-hidden backdrop-blur-xl hover:border-primary/50 transition-all duration-300">
+          <div className="flex items-center gap-2 p-2">
+            {!isExpanded && (
+              <div className="flex items-center gap-2 pl-2 pr-1 text-muted-foreground/80">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">Ask AI</span>
+              </div>
+            )}
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              onFocus={handleFocus}
+              placeholder={isExpanded ? "Ask about temperature, rain, wind..." : ""}
+              className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || isLoading}
+              size="icon"
+              className="rounded-full h-9 w-9 bg-primary hover:bg-primary/90 transition-all duration-300 hover:scale-105 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </motion.div>
