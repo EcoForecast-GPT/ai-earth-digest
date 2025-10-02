@@ -59,37 +59,10 @@ const WeatherControls = ({
   }, [date]);
 
   const handleCustomLocationSubmit = () => {
-  // Handle city selection
-  const handleCitySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const cityName = e.target.value;
-    setSelectedCity(cityName);
-    const city = presetLocations.find(c => c.name === cityName);
-    if (city) {
-      onLocationChange(city);
-    }
-    // Always trigger fetch for new city selection
-    if (cityName) {
-      onFetch();
-    }
-  };
-
-  // Handle country selection
-  const handleCountrySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const countryName = e.target.value;
-    setSelectedCountry(countryName);
-    const country = countries.find(c => c.name === countryName);
-    if (country) {
-      onLocationChange({ lat: country.lat, lon: country.lon, name: country.name });
-      // Always trigger fetch for new country selection
-      onFetch();
-    }
-  };
     const parts = customLocation.split(',').map(part => part.trim());
-    
     if (parts.length === 2) {
       const lat = parseFloat(parts[0]);
       const lon = parseFloat(parts[1]);
-      
       if (!isNaN(lat) && !isNaN(lon)) {
         onLocationChange({
           lat,
@@ -105,6 +78,26 @@ const WeatherControls = ({
       }
     }
     setCustomLocation("");
+  };
+
+  const handleCitySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cityName = e.target.value;
+    setSelectedCity(cityName);
+    const city = presetLocations.find(c => c.name === cityName);
+    if (city) {
+      onLocationChange(city);
+      onFetch();
+    }
+  };
+
+  const handleCountrySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const countryName = e.target.value;
+    setSelectedCountry(countryName);
+    const country = countries.find(c => c.name === countryName);
+    if (country) {
+      onLocationChange({ lat: country.lat, lon: country.lon, name: country.name });
+      onFetch();
+    }
   };
 
   return (
@@ -148,6 +141,8 @@ const WeatherControls = ({
           ))}
         </select>
       </div>
+
+      {/* The rest of the WeatherControls UI follows here */}
       <motion.div 
         className="flex items-center gap-2 mb-4"
         initial={{ opacity: 0, y: -10 }}
@@ -174,53 +169,56 @@ const WeatherControls = ({
         </Label>
         
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          {/* ...existing code... */}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="text-sm text-destructive bg-destructive/10 p-2 rounded-lg"
-          >
-            {locationError.message}
-          </motion.div>
-        )}
-
-        <div className="grid grid-cols-1 gap-2">
-          {presetLocations.map((preset, index) => (
+          {/* Show location error if present */}
+          {locationError && locationError.message && (
             <motion.div
-              key={preset.name}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 + index * 0.1 }}
-              whileHover={{ scale: 1.02 }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="text-sm text-destructive bg-destructive/10 p-2 rounded-lg"
             >
-              <Button
-                variant={location.name === preset.name ? "default" : "outline"}
-                className={`w-full justify-start text-left glass-panel transition-all duration-300 ${
-                  location.name === preset.name ? "glow-primary" : "hover:glow-accent"
-                }`}
-                onClick={() => onLocationChange(preset)}
-              >
-                <MapPin className="w-4 h-4 mr-2" />
-                {preset.name}
-              </Button>
+              {locationError.message}
             </motion.div>
-          ))}
-        </div>
+          )}
 
-        <motion.div className="flex space-x-2">
-          <Input
-            value={customLocation}
-            onChange={(e) => setCustomLocation(e.target.value)}
-            placeholder="Enter City, State or lat, lon"
-            className="glass-panel border-white/10 focus:border-primary/50"
-            onKeyDown={(e) => e.key === 'Enter' && handleCustomLocationSubmit()}
-          />
-          <Button 
-            onClick={handleCustomLocationSubmit}
-            variant="outline"
-            className="glass-panel hover:glow-primary transition-all duration-300"
-          >
-            <Globe className="w-4 h-4" />
-          </Button>
+          <div className="grid grid-cols-1 gap-2">
+            {presetLocations.map((preset, index) => (
+              <motion.div
+                key={preset.name}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + index * 0.1 }}
+                whileHover={{ scale: 1.02 }}
+              >
+                <Button
+                  variant={location.name === preset.name ? "default" : "outline"}
+                  className={`w-full justify-start text-left glass-panel transition-all duration-300 ${
+                    location.name === preset.name ? "glow-primary" : "hover:glow-accent"
+                  }`}
+                  onClick={() => onLocationChange(preset)}
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  {preset.name}
+                </Button>
+              </motion.div>
+            ))}
+          </div>
+
+          <motion.div className="flex space-x-2">
+            <Input
+              value={customLocation}
+              onChange={(e) => setCustomLocation(e.target.value)}
+              placeholder="Enter City, State or lat, lon"
+              className="glass-panel border-white/10 focus:border-primary/50"
+              onKeyDown={(e) => e.key === 'Enter' && handleCustomLocationSubmit()}
+            />
+            <Button 
+              onClick={handleCustomLocationSubmit}
+              variant="outline"
+              className="glass-panel hover:glow-primary transition-all duration-300"
+            >
+              <Globe className="w-4 h-4" />
+            </Button>
+          </motion.div>
         </motion.div>
       </motion.div>
 
@@ -276,6 +274,16 @@ const WeatherControls = ({
           </>
         )}
       </Button>
+
+      {weatherData.length > 0 && (
+        <DataExport 
+          weatherData={weatherData}
+          location={location}
+          dateRange={{start: date, end: date}}
+        />
+      )}
+    </motion.div>
+  );
 
       {weatherData.length > 0 && (
         <DataExport 
