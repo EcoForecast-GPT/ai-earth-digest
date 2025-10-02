@@ -294,6 +294,5 @@ const WeatherControls = ({
       )}
     </motion.div>
   );
-};
 
 export default WeatherControls;
