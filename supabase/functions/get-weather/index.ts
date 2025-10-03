@@ -63,14 +63,13 @@ serve(async (req: Request) => {
       // Build proxy URL to fetch time-series for the day
       const proxyUrl = `https://${new URL(req.url).host}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
       
-      // Extract the authorization header from the incoming request
-      const auth = req.headers.get('Authorization') || '';
+      // Extract the apikey from the incoming request and use it for both headers
       const apikey = req.headers.get('apikey') || '';
       
-      // We'll fetch the proxy and pass through the auth headers
+      // We'll fetch the proxy using apikey for both headers (this is how Supabase Edge Functions expect it)
       const proxyResp = await fetch(proxyUrl, {
         headers: {
-          'Authorization': auth,
+          'Authorization': `Bearer ${apikey}`,
           'apikey': apikey
         }
       });
