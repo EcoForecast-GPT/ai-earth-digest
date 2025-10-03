@@ -52,133 +52,90 @@ serve(async (req) => {
     if (requestedDate) {
       requestedDate.setHours(0,0,0,0);
       const dateString = requestedDate.toISOString().split('T')[0];
-      // For all date types (past, today, future) prefer NASA time-series via proxy
-      // Build proxy URL to fetch time-series for the day
-      const proxyUrl = `https://${new URL(req.url).host}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
-      // We'll fetch the proxy and parse its JSON or plain text output below
-      const proxyResp = await fetch(proxyUrl);
-      if (!proxyResp.ok) throw new Error(`NASA proxy error: ${proxyResp.status}`);
-
-      // If proxy returned JSON (fallback), parse series; otherwise parse plain text
-      let series: any[] = [];
-      const ct = proxyResp.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        const body = await proxyResp.json();
-        if (Array.isArray(body.series)) series = body.series.map((s: any) => ({
-          time: s.timestamp || s.time,
-          temperature: s.tempK ? s.tempK - 273.15 : s.temperature,
-          precipitation: s.precipMm ?? s.precipitation ?? 0,
-          windSpeed: s.windSpeed,
-          humidity: s.humidity,
-        }));
+      if (requestedDate >= now) {
+        // Future or today
+        openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=auto&start_date=${dateString}&end_date=${dateString}`;
       } else {
-        const raw = await proxyResp.text();
-        const lines = raw.trim().split('\n').filter(l => !l.startsWith('#') && !l.toLowerCase().startsWith('date'));
-        for (const line of lines) {
-          const tokens = line.split(/\s+/);
-          const timestamp = tokens[0];
-          const tempK = parseFloat(tokens[1]);
-          const precip = parseFloat(tokens[2] || '0');
-          series.push({ time: new Date(timestamp).toISOString(), temperature: (isNaN(tempK) ? NaN : tempK - 273.15), precipitation: isNaN(precip) ? 0 : precip });
-        }
+        // Past date
+        openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=auto&start_date=${dateString}&end_date=${dateString}`;
       }
-
-      // Compute daily aggregates
-      const temps = series.filter(s => typeof s.temperature === 'number' && !isNaN(s.temperature)).map(s => s.temperature);
-      const precs = series.filter(s => typeof s.precipitation === 'number').map(s => s.precipitation);
-      const winds = series.filter(s => typeof s.windSpeed === 'number').map(s => s.windSpeed);
-      const hums = series.filter(s => typeof s.humidity === 'number').map(s => s.humidity);
-
-      const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      const sum = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) : 0;
-
-      const temperature = Math.round(avg(temps) * 10) / 10;
-      const precipitation = Math.round(sum(precs) * 10) / 10;
-      const humidity = Math.round(avg(hums));
-      const windSpeed = Math.round(avg(winds) * 10) / 10;
-
-      const condition = precipitation > 2 ? 'rainy' : (humidity > 70 ? 'cloudy' : 'sunny');
-
-      const weatherData: WeatherData = {
-        temperature,
-        precipitation,
-        humidity,
-        windSpeed,
-        pressure: 1013,
-        visibility: 10,
-        uvIndex: 0,
-        condition: condition as WeatherData['condition']
-      };
-
-      return new Response(JSON.stringify(weatherData), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     } else {
-      // Current weather: use NASA time-series via proxy for today's aggregates (no Open-Meteo)
-      const todayStr = now.toISOString().split('T')[0];
-      const proxyUrlToday = `https://${new URL(req.url).host}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${todayStr}&endDate=${todayStr}`;
-      const proxyRespToday = await fetch(proxyUrlToday);
-      if (!proxyRespToday.ok) throw new Error(`NASA proxy error: ${proxyRespToday.status}`);
+      // Current weather
+      openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m&daily=uv_index_max&timezone=auto`;
+    }
+    
+    const response = await fetch(openMeteoUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Open-Meteo API error: ${response.status}`);
+    }
 
-      let seriesToday: any[] = [];
-      const ctToday = proxyRespToday.headers.get('content-type') || '';
-      if (ctToday.includes('application/json')) {
-        const body = await proxyRespToday.json();
-        if (Array.isArray(body.series)) seriesToday = body.series.map((s: any) => ({
-          time: s.timestamp || s.time,
-          temperature: s.tempK ? s.tempK - 273.15 : s.temperature,
-          precipitation: s.precipMm ?? s.precipitation ?? 0,
-          windSpeed: s.windSpeed,
-          humidity: s.humidity,
-        }));
-      } else {
-        const raw = await proxyRespToday.text();
-        const lines = raw.trim().split('\n').filter(l => !l.startsWith('#') && !l.toLowerCase().startsWith('date'));
-        for (const line of lines) {
-          const tokens = line.split(/\s+/);
-          const timestamp = tokens[0];
-          const tempK = parseFloat(tokens[1]);
-          const precip = parseFloat(tokens[2] || '0');
-          seriesToday.push({ time: new Date(timestamp).toISOString(), temperature: (isNaN(tempK) ? NaN : tempK - 273.15), precipitation: isNaN(precip) ? 0 : precip });
-        }
+    const data = await response.json();
+    console.log('Open-Meteo response:', JSON.stringify(data));
+
+    let weatherData: WeatherData;
+
+    if (requestedDate) {
+      const daily = data.daily;
+      const temperature = (daily.temperature_2m_max[0] + daily.temperature_2m_min[0]) / 2;
+      const condition = codeToCondition(daily.weather_code[0]);
+
+      weatherData = {
+        temperature: temperature,
+        precipitation: daily.precipitation_sum[0],
+        humidity: 50, // Not available in daily historical data
+        windSpeed: daily.wind_speed_10m_max[0],
+        pressure: 1012, // Not available in daily historical data
+        visibility: 10, // Not available
+        uvIndex: daily.uv_index_max[0],
+        condition: condition
+      };
+    } else {
+      const current = data.current;
+      const daily = data.daily;
+      const temperature = current.temperature_2m;
+      const humidity = current.relative_humidity_2m;
+      const weatherCode = current.weather_code;
+      let visibility = 10;
+      if (weatherCode >= 45 && weatherCode <= 48) visibility = 2; // fog
+      else if (weatherCode >= 51 && weatherCode <= 67) visibility = 5; // rain
+      else if (weatherCode >= 71 && weatherCode <= 77) visibility = 3; // snow
+      else if (weatherCode >= 80 && weatherCode <= 99) visibility = 4; // showers/thunderstorms
+      else if (humidity > 85) visibility = 7;
+
+
+      let condition = codeToCondition(weatherCode);
+      // Only override to 'partly cloudy' if it's currently 'sunny' or 'very sunny', humidity is high, and not rainy/cloudy
+      if ((condition === 'sunny' || condition === 'very sunny') && humidity > 70) {
+        condition = 'partly cloudy';
+      }
+      if (condition === 'sunny' && daily.uv_index_max[0] > 8 && temperature > 25) {
+        condition = 'very sunny';
       }
 
-      const temps = seriesToday.filter(s => typeof s.temperature === 'number' && !isNaN(s.temperature)).map(s => s.temperature);
-      const precs = seriesToday.filter(s => typeof s.precipitation === 'number').map(s => s.precipitation);
-      const winds = seriesToday.filter(s => typeof s.windSpeed === 'number').map(s => s.windSpeed);
-      const hums = seriesToday.filter(s => typeof s.humidity === 'number').map(s => s.humidity);
-
-      const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      const sum = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) : 0;
-
-      const temperature = Math.round(avg(temps) * 10) / 10;
-      const precipitation = Math.round(sum(precs) * 10) / 10;
-      const humidity = Math.round(avg(hums));
-      const windSpeed = Math.round(avg(winds) * 10) / 10;
-
-      const condition = precipitation > 2 ? 'rainy' : (humidity > 70 ? 'cloudy' : 'sunny');
-
-      const weatherData: WeatherData = {
-        temperature,
-        precipitation,
-        humidity,
-        windSpeed,
-        pressure: 1013,
-        visibility: 10,
-        uvIndex: 0,
-        condition: condition as WeatherData['condition']
+      weatherData = {
+        temperature: temperature,
+        precipitation: current.precipitation || 0,
+        humidity: humidity,
+        windSpeed: current.wind_speed_10m,
+        pressure: current.surface_pressure,
+        visibility: visibility,
+        uvIndex: daily.uv_index_max[0] || 5,
+        condition: condition
       };
-
-      console.log('Processed weather data:', weatherData);
-
-      return new Response(
-        JSON.stringify(weatherData),
-        { 
-          headers: { 
-            ...corsHeaders, 
-            'Content-Type': 'application/json' 
-          } 
-        }
-      );
     }
+
+    console.log('Processed weather data:', weatherData);
+
+    return new Response(
+      JSON.stringify(weatherData),
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
+    );
 
   } catch (error) {
     console.error('Error in get-weather function:', error);
