@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input';
 interface FloatingChatInputProps {
   weatherData: any;
   location: string;
+  selectedDate?: string;
+  onPredictionRequest?: (query: string) => void;
 }
 
-export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputProps) => {
+export const FloatingChatInput = ({ weatherData, location, selectedDate, onPredictionRequest }: FloatingChatInputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,11 +34,71 @@ export const FloatingChatInput = ({ weatherData, location }: FloatingChatInputPr
   }, [input]);
 
   const generateWeatherResponse = (userMessage: string): string => {
-    // This function remains for future use but is not currently displaying output
     const message = userMessage.toLowerCase();
-    if (!weatherData) return "I'm currently gathering weather data. Please wait a moment!";
-    if (message.includes('temperature')) return `The current temperature in ${location} is ${weatherData.temperature.toFixed(1)}°C.`;
-    return `I can help you with weather information for ${location}!`;
+    
+    // Check for future/past prediction requests
+    const isFutureQuery = message.includes('tomorrow') || message.includes('next week') || 
+                          message.includes('future') || message.includes('will be') ||
+                          message.includes('going to be') || /\d{4}-\d{2}-\d{2}/.test(message) ||
+                          message.includes('predict');
+    
+    const isPastQuery = message.includes('yesterday') || message.includes('last week') ||
+                        message.includes('past') || message.includes('was') ||
+                        message.includes('historical');
+    
+    if (isFutureQuery || isPastQuery) {
+      const today = new Date().toISOString().split('T')[0];
+      const queryDate = selectedDate !== today;
+      
+      if (queryDate && weatherData) {
+        const dateObj = new Date(selectedDate || today);
+        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        const timeContext = selectedDate && selectedDate > today ? 'prediction for' : 'data from';
+        
+        return `Based on my analysis ${timeContext} ${dateStr} in ${location}: ` +
+               `Temperature: ${weatherData.temperature?.toFixed(1)}°C, ` +
+               `Precipitation: ${weatherData.precipitation?.toFixed(1)}mm, ` +
+               `Humidity: ${weatherData.humidity?.toFixed(0)}%, ` +
+               `Wind: ${weatherData.windSpeed?.toFixed(1)} km/h. ` +
+               `${weatherData.temperature > 35 ? 'Extremely hot conditions!' : 
+                 weatherData.temperature > 30 ? 'Hot weather expected.' : 
+                 weatherData.temperature < 5 ? 'Cold conditions.' : 'Comfortable range.'}`;
+      }
+      
+      if (onPredictionRequest) {
+        onPredictionRequest(userMessage);
+        return `Select a future date and I'll provide an accurate prediction for ${location}!`;
+      }
+      
+      return `Select a date to get predictions or historical data for ${location}!`;
+    }
+    
+    if (!weatherData) return "I'm gathering weather data. Please wait!";
+    
+    const temp = weatherData?.temperature;
+    const precip = weatherData?.precipitation;
+    const humidity = weatherData?.humidity;
+    
+    if (message.includes('temperature') || message.includes('hot') || message.includes('cold')) {
+      if (temp !== undefined) {
+        const feel = temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp > 15 ? 'comfortable' : 'cool';
+        return `Temperature in ${location}: ${temp.toFixed(1)}°C (${feel})`;
+      }
+    }
+    
+    if (message.includes('rain') || message.includes('precipitation')) {
+      if (precip !== undefined) {
+        return `Precipitation in ${location}: ${precip.toFixed(1)}mm${precip > 50 ? ' - heavy rain!' : precip > 10 ? ' - moderate rain' : ' - light/no rain'}`;
+      }
+    }
+    
+    if (message.includes('humidity')) {
+      if (humidity !== undefined) {
+        return `Humidity in ${location}: ${humidity.toFixed(0)}%${humidity > 80 ? ' - very humid' : ' - comfortable'}`;
+      }
+    }
+    
+    return `Ask me about temperature, rain, humidity, or future/past predictions for ${location}!`;
   };
 
   const handleSend = async () => {

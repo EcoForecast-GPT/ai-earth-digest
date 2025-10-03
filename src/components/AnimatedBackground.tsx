@@ -6,9 +6,13 @@ export const AnimatedBackground = memo(() => {
   
   return (
     <div 
-      className="animated-bg-container" 
+      className={actualTheme === 'light' ? '' : 'animated-bg-container'}
       style={{ 
-        background: actualTheme === 'light' ? 'hsl(0 0% 100%)' : 'hsl(0 0% 0%)' 
+        background: actualTheme === 'light' ? 'hsl(0 0% 100%)' : 'hsl(0 0% 0%)',
+        position: 'absolute',
+        inset: 0,
+        zIndex: 0,
+        transition: 'background 0.3s ease'
       }} 
     />
   );

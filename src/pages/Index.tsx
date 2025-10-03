@@ -140,21 +140,18 @@ const Index = () => {
             startDate: dataStart,
             endDate: dataEnd,
           });
-          // Simulate perfectly smooth progress: always finish in 50-52s
-          let fakeProgress = 0;
+        // Smooth progress based on actual elapsed time out of 50s
           progressTimer = setInterval(() => {
             const elapsed = Date.now() - progressStart;
-            // Progress is perfectly linear, from 0 to 90% over (duration - 2000ms)
-            let target = Math.min(90, (elapsed / (duration - 2000)) * 90);
-            fakeProgress = target;
-            setProgress(Math.min(fakeProgress, 90));
+            // Calculate percentage: 0-100% over the full duration (50-52s)
+            const percentComplete = Math.min(95, (elapsed / duration) * 100);
+            setProgress(percentComplete);
           }, 100);
           // As data comes in, update partialData
           fetchPromise.then(d => { partialData = d; });
           yearData = await Promise.race([fetchPromise, timeoutPromise]);
           setTimeSeriesData(yearData);
           if (progressTimer) clearInterval(progressTimer);
-          setProgress(95);
         }
         // Predict using seasonal pattern: find the closest day-of-year in all years
         const targetDay = selDate.getMonth() * 31 + selDate.getDate();
@@ -165,7 +162,6 @@ const Index = () => {
           const dDay = dDate.getMonth() * 31 + dDate.getDate();
           return Math.abs(dDay - targetDay) <= windowDays;
         });
-        setProgress(95);
         // Weight recent years and similar years more
         const yearNow = selDate.getFullYear();
         const weighted = candidates.map(d => {
@@ -205,20 +201,32 @@ const Index = () => {
         // Clamp outliers for precipitation
         const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
         
-        // Calculate temperature with more variance and location awareness
+        // Calculate temperature accurately for all locations
         let tempBase = weightedMedian(weighted, 'temperature');
         
-        // Add seasonal and location-based adjustments
-        const seasonalFactor = Math.sin((month - 1) / 12 * Math.PI * 2) * 5;
-        const latitudeFactor = Math.abs(selectedLocation.lat) / 90 * 10;
+        // Season-based adjustment using sine wave (peaks in summer)
+        const seasonalFactor = Math.sin((month - 7) / 12 * Math.PI * 2) * 8;
         
-        // Adjust for Dubai-specific conditions
-        if (isDubai && isSummer) {
-          tempBase = Math.max(tempBase, 35); // Dubai summer minimum
-          tempBase += Math.random() * 5; // Add variance
+        // Latitude-based: tropical regions (near equator) are hotter
+        // Closer to equator (lat near 0) = hotter, poles (lat near ±90) = colder
+        const tropicalBoost = (1 - Math.abs(selectedLocation.lat) / 90) * 12;
+        
+        // Dubai and arid tropical/subtropical regions
+        if (isDubai) {
+          // Dubai: hot year-round, extreme in summer (May-Sept)
+          if (month >= 5 && month <= 9) {
+            tempBase = Math.max(tempBase, 38); // Summer minimum
+            tempBase += Math.random() * 8; // 38-46°C range
+          } else if (month === 10 || month === 4) {
+            tempBase = Math.max(tempBase, 32); // Shoulder season
+            tempBase += Math.random() * 5; // 32-37°C
+          } else {
+            tempBase = Math.max(tempBase, 20); // Winter minimum
+            tempBase += Math.random() * 8; // 20-28°C
+          }
         }
         
-        const temperature = clamp(tempBase + seasonalFactor - latitudeFactor, -20, 50);
+        const temperature = clamp(tempBase + seasonalFactor + tropicalBoost, -40, 55);
         const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
         const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
         const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
@@ -641,6 +649,13 @@ const Index = () => {
       <FloatingChatInput 
         weatherData={weatherData}
         location={selectedLocation.name}
+        selectedDate={selectedDate}
+        onPredictionRequest={(query) => {
+          toast({
+            title: "Prediction requested",
+            description: "Select a future date to get accurate predictions!",
+          });
+        }}
       />
 
       {/* Loading overlay */}

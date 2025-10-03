@@ -15,9 +15,11 @@ interface Message {
 interface WeatherChatbotProps {
   weatherData?: any;
   location?: string;
+  selectedDate?: string;
+  onPredictionRequest?: (query: string) => void;
 }
 
-export const WeatherChatbot = ({ weatherData, location }: WeatherChatbotProps) => {
+export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredictionRequest }: WeatherChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -45,6 +47,48 @@ export const WeatherChatbot = ({ weatherData, location }: WeatherChatbotProps) =
 
   const generateWeatherResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
+    
+    // Check for future/past prediction requests
+    const isFutureQuery = message.includes('tomorrow') || message.includes('next week') || 
+                          message.includes('future') || message.includes('will be') ||
+                          message.includes('going to be') || /\d{4}-\d{2}-\d{2}/.test(message) ||
+                          message.includes('predict');
+    
+    const isPastQuery = message.includes('yesterday') || message.includes('last week') ||
+                        message.includes('past') || message.includes('was') ||
+                        message.includes('historical');
+    
+    if (isFutureQuery || isPastQuery) {
+      // Check if we have data for a non-current date
+      const today = new Date().toISOString().split('T')[0];
+      const queryDate = selectedDate !== today;
+      
+      if (queryDate && weatherData) {
+        const dateObj = new Date(selectedDate || today);
+        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        const timeContext = selectedDate && selectedDate > today ? 'prediction for' : 'data from';
+        
+        return `Based on my analysis ${timeContext} ${dateStr}${location ? ` in ${location}` : ''}: ` +
+               `Temperature: ${weatherData.temperature?.toFixed(1)}°C, ` +
+               `Precipitation: ${weatherData.precipitation?.toFixed(1)}mm, ` +
+               `Humidity: ${weatherData.humidity?.toFixed(0)}%, ` +
+               `Wind: ${weatherData.windSpeed?.toFixed(1)} km/h. ` +
+               `${weatherData.temperature > 35 ? 'Extremely hot conditions - stay hydrated!' : 
+                 weatherData.temperature > 30 ? 'Hot weather - use sun protection.' : 
+                 weatherData.temperature < 5 ? 'Cold conditions - dress warmly.' : 
+                 'Comfortable temperature range.'} ` +
+               `${weatherData.precipitation > 50 ? 'Heavy rain expected!' : 
+                 weatherData.humidity > 80 && weatherData.precipitation < 50 ? 'High humidity, possible haze.' : ''}`;
+      }
+      
+      // Trigger prediction if callback provided
+      if (onPredictionRequest) {
+        onPredictionRequest(userMessage);
+        return `I'll analyze the weather patterns to give you an accurate prediction. Please select a date and I'll calculate the forecast using advanced climate models.`;
+      }
+      
+      return `To get future predictions or past weather data, please select a specific date in the date picker above. I can analyze weather patterns for any date within 3 years forward or look at historical data.`;
+    }
     
     // Extract weather data if available
     const temp = weatherData?.temperature;
