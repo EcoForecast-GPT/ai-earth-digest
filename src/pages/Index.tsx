@@ -50,6 +50,7 @@ export interface WeatherData {
 const Index = () => {
   const { toast } = useToast();
   const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
+  // Always default to Dubai, UAE
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
     lat: 25.276987,
     lon: 55.296249,
@@ -371,7 +372,7 @@ const Index = () => {
   }, [selectedLocation, selectedDate, toast, timeSeriesData]);
 
 
-  // Fetch time-series data for the chart (NASA trends)
+  // Always fetch weather trends from NASA data API (no synthetic/local data)
   useEffect(() => {
     const fetchChartData = async () => {
       if (!selectedLocation) return;
@@ -384,8 +385,8 @@ const Index = () => {
           startDate: trendStartDate,
           endDate: trendEndDate,
         });
-        setTimeSeriesData(data);
-        console.debug('Time series data set in Index:', data.slice(0, 10));
+        setTimeSeriesData(Array.isArray(data) ? data : []);
+        console.debug('Time series data set in Index (NASA only):', Array.isArray(data) ? data.slice(0, 10) : data);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({
@@ -635,7 +636,8 @@ const Index = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="flex-1 w-full max-w-full"
+              className="flex-1 w-full max-w-full min-w-0"
+              style={{ minWidth: 0 }}
             >
               {weatherTrendsWidget}
             </motion.div>
@@ -643,7 +645,8 @@ const Index = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
-              className="flex-1 w-full max-w-full"
+              className="flex-1 w-full max-w-full min-w-0"
+              style={{ minWidth: 0 }}
             >
               {aiSummaryWidget.component}
             </motion.div>
