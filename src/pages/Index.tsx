@@ -193,11 +193,10 @@ const Index = () => {
           return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
         }
         // Clamp outliers for precipitation
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  // Increase temperature by 16°C for every situation
-  const temperature = clamp(weightedMedian(weighted, 'temperature') + 16, -20, 50);
-  const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 50);
-  const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const temperature = clamp(weightedMedian(weighted, 'temperature'), -20, 50);
+        const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 50);
+        const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
         const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
         // Location-aware prediction for Dubai and similar arid regions
         const isDubai = selectedLocation && (
