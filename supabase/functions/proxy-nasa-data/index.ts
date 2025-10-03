@@ -4,6 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 type Request = {
   method: string;
   url: string;
+  headers: Headers;
 };
 
 const corsHeaders = {
@@ -19,6 +20,15 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Check authorization
+  const apiKey = req.headers.get('apikey');
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'Missing API key' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+  
   try {
     const url = new URL(req.url);
     const { lat, lon, startDate, endDate } = Object.fromEntries(url.searchParams.entries());
@@ -95,41 +105,28 @@ serve(async (req: Request) => {
       isFuture
     });
     
-    // For historical dates, use NASA POWER API with timestamps
-    let weatherData;
-    try {
-      const response = await fetch(nasaUrl, {
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('NASA POWER API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errText
-        });
-        throw new Error(`NASA API failed with status: ${response.status}`);
+    // For historical dates, use NASA POWER API
+    const resp = await fetch(nasaUrl, {
+      headers: {
+        'Accept': 'application/json'
       }
+    });
 
-      weatherData = await response.json();
-    } catch (error) {
-      console.error('NASA POWER API request failed:', error);
-      
-      // Return fallback data for past dates with empty series
-      weatherData = {
-        properties: {
-          parameter: {
-            T2M: {},
-            PRECTOT: {},
-            RH2M: {},
-            WS2M: {}
-          }
-        }
-      };
+    if (!resp.ok) {
+      console.error('NASA POWER API error:', {
+        status: resp.status,
+        statusText: resp.statusText
+      });
+      return new Response(JSON.stringify({ 
+        error: `NASA API failed with status: ${resp.status}`,
+        details: await resp.text()
+      }), {
+        status: resp.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    const weatherData = await resp.json();
     
     // Return the weather data
     return new Response(JSON.stringify(weatherData), {
