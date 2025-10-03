@@ -2,6 +2,7 @@
  * @file This service is responsible for fetching data from NASA's Earthdata services,
  * such as Data Rods for time-series data and GIBS for map imagery.
  */
+import { config } from '@/lib/config';
 
 const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG'; // Public key
 const EARTHDATA_TOKEN = 'eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOiJFYXJ0aGRhdGEgTG9naW4iLCJzaWciOiJlZGxqd3RwdWJrZXlfb3BzIiwiYWxnIjoiUlMyNTYifQ.eyJ0eXBlIjoiVXNlciIsInVpZCI6InNocmVzdGgwOTAxIiwiZXhwIjoxNzY0NTY3MTE4LCJpYXQiOjE3NTkzODMxMTgsImlzcyI6Imh0dHBzOi8vdXJzLmVhcnRoZGF0YS5uYXNhLmdvdiIsImlkZW50aXR5X3Byb3ZpZGVyIjoiZWRsX29wcyIsImFjciI6ImVkbCIsImFzc3VyYW5jZV9sZXZlbCI6M30.1DtnKV8tU2kCNy-hlKImBIurffJl7uOe48H732nHDIV5uZJWeA4NI05o0fb0g9ux5ikc5nNFHaAPq5PFn-NPdEA2ErCzZBPGXmycYqiz3cuv9cGY5JevObzzpoJt5Nr4eVAqCVMDarI1KIWFcvvYs57bQEMTMU9bTbQxOAehN4sT-cQwWNY-vq1Qvfpk67K1wWz6KdN4TQ_1M0ZY4O8kzYTAJir6yrIVj4H_OYCMOLZhMkpyZyv_p961oNtC8WeeE1pPyehzkSF9eZMHCelYs689fCYxnJTjYPPIM9F2lhUNesm5E5_cddinnz1QcoHv6B8eUEJJwvkQehGBVLwrww';
@@ -61,11 +62,20 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
       } catch (e) {
         // ignore
       }
-      console.debug('NASA POWER API response:', body);
+      if (config.DEBUG) {
+        console.debug('NASA POWER API response:', body);
+      }
       
-      if (body.properties && body.properties.parameter) {
+      if (body.properties?.parameter) {
         const params = body.properties.parameter;
+        if (!params.T2M || !params.PRECTOT || !params.RH2M || !params.WS2M) {
+          throw new Error('Missing required parameters in NASA POWER API response');
+        }
+        
         const timestamps = Object.keys(params.T2M);
+        if (timestamps.length === 0) {
+          throw new Error('No data points found in NASA POWER API response');
+        }
         
         const parsed = timestamps.map(timestamp => {
           // T2M is in Celsius, no conversion needed
