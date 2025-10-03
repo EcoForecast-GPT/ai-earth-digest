@@ -491,150 +491,151 @@ const Index = () => {
   );
 
   return (
-
-    <div className={`min-h-screen relative overflow-hidden${isLightMode ? ' bg-white' : ''}`}>
-      {/* Only show animated background in dark mode */}
-      {!isLightMode && <AnimatedBackground />}
-      {/* Header */}
-      <motion.header 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
-      >
-        <motion.div 
-          className="flex items-center gap-3"
-          whileHover={{ scale: 1.02 }}
+    <ErrorBoundary fallback={<div className="min-h-screen flex flex-col items-center justify-center bg-white text-red-600"><h1 className="text-2xl font-bold mb-2">Something went wrong.</h1><p className="mb-4">Please refresh the page or try again later.</p></div>}>
+      <div className={`min-h-screen relative overflow-hidden${isLightMode ? ' bg-white' : ''}`}>
+        {/* Only show animated background in dark mode */}
+        {!isLightMode && <AnimatedBackground />}
+        {/* Header */}
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
         >
-          <img 
-            src={logo} 
-            alt="EcoForecast Logo" 
-            className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
-          />
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
-          </div>
-        </motion.div>
-        <ThemeToggle />
-      </motion.header>
-
-      {/* Main Content */}
-      <main className="relative z-10 p-4 md:p-6">
-        <NPUStatus />
-        <div className="w-full max-w-full mx-auto space-y-6">
-          {/* Minimal Weather Menu */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+          <motion.div 
+            className="flex items-center gap-3"
+            whileHover={{ scale: 1.02 }}
           >
-            {predictionProgress !== null ? (
-              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
-                <div className="w-full flex items-center gap-2">
-                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${predictionProgress}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
-              </div>
-            ) : (
-              <MinimalWeatherMenu
-                location={selectedLocation}
-                temperature={weatherData?.temperature}
-                condition={weatherCondition}
-                isLoading={isLoading}
-                onLocationChange={loc => setSelectedLocation(loc)}
-              />
-            )}
-          </motion.div>
-
-          {/* AI Summary - Full Width */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="w-full"
-          >
-            {aiSummaryWidget.component}
-          </motion.div>
-
-          <div className="flex justify-end mb-2">
-            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
-          </div>
-
-          {showDebug && <DebugPanel />}
-
-          {/* Weather Trends - Full Width */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="w-full"
-          >
-            {weatherTrendsWidget}
-          </motion.div>
-
-          {/* Weather Controls - Full Width at Bottom */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
-            className="w-full mt-8"
-          >
-            <div className="max-w-7xl mx-auto">
-              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
-                {weatherControlsWidget.component}
-              </div>
+            <img 
+              src={logo} 
+              alt="EcoForecast Logo" 
+              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
+            />
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
+              <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
             </div>
           </motion.div>
+          <ThemeToggle />
+        </motion.header>
 
-          {/* Data Export at Bottom */}
-          {weatherData && (
+        {/* Main Content */}
+        <main className="relative z-10 p-4 md:p-6">
+          <NPUStatus />
+          <div className="w-full max-w-full mx-auto space-y-6">
+            {/* Minimal Weather Menu */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="flex justify-center"
+              transition={{ delay: 0.1 }}
             >
-              <DataExport 
-                weatherData={[weatherData]}
-                location={selectedLocation}
-                dateRange={{ start: selectedDate, end: selectedDate }}
-              />
+              {predictionProgress !== null ? (
+                <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
+                  <div className="w-full flex items-center gap-2">
+                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${predictionProgress}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
+                </div>
+              ) : (
+                <MinimalWeatherMenu
+                  location={selectedLocation}
+                  temperature={weatherData?.temperature}
+                  condition={weatherCondition}
+                  isLoading={isLoading}
+                  onLocationChange={loc => setSelectedLocation(loc)}
+                />
+              )}
+            </motion.div>
+
+            {/* AI Summary - Full Width */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="w-full"
+            >
+              {aiSummaryWidget.component}
+            </motion.div>
+
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
+            </div>
+
+            {showDebug && <DebugPanel />}
+
+            {/* Weather Trends - Full Width */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="w-full"
+            >
+              {weatherTrendsWidget}
+            </motion.div>
+
+            {/* Weather Controls - Full Width at Bottom */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="w-full mt-8"
+            >
+              <div className="max-w-7xl mx-auto">
+                <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
+                  {weatherControlsWidget.component}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Data Export at Bottom */}
+            {weatherData && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="flex justify-center"
+              >
+                <DataExport 
+                  weatherData={[weatherData]}
+                  location={selectedLocation}
+                  dateRange={{ start: selectedDate, end: selectedDate }}
+                />
+              </motion.div>
+            )}
+          </div>
+        </main>
+
+        {/* Floating Chat Input */}
+        <FloatingChatInput 
+          weatherData={weatherData}
+          location={selectedLocation.name}
+        />
+
+        {/* Loading overlay */}
+        <AnimatePresence>
+          {(isLoading || locationLoading) && predictionProgress === null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
+            >
+              <motion.div className="text-center">
+                <PlanetLoader />
+                <p className="text-sm text-primary mt-4 font-medium">
+                  {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
+                </p>
+              </motion.div>
             </motion.div>
           )}
-        </div>
-      </main>
-
-      {/* Floating Chat Input */}
-      <FloatingChatInput 
-        weatherData={weatherData}
-        location={selectedLocation.name}
-      />
-
-      {/* Loading overlay */}
-      <AnimatePresence>
-        {(isLoading || locationLoading) && predictionProgress === null && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
-          >
-            <motion.div className="text-center">
-              <PlanetLoader />
-              <p className="text-sm text-primary mt-4 font-medium">
-                {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
-              </p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+        </AnimatePresence>
+      </div>
+    </ErrorBoundary>
   );
 };
 
