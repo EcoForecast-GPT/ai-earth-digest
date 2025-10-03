@@ -16,7 +16,6 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
-import { predictWeatherFromSeries } from '@/lib/predictor';
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DebugPanel from "@/components/DebugPanel";
 import WeatherControls from "@/components/WeatherControls";
@@ -51,7 +50,6 @@ export interface WeatherData {
 const Index = () => {
   const { toast } = useToast();
   const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
-  // Always default to Dubai, UAE
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
     lat: 25.276987,
     lon: 55.296249,
@@ -89,58 +87,230 @@ const Index = () => {
 
   const fetchWeatherData = useCallback(async () => {
     // Check if selectedDate is in the future (up to 3 years)
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const selDate = new Date(selectedDate);
+    selDate.setHours(0,0,0,0);
+    const msInDay = 24*60*60*1000;
+    const maxFuture = new Date(today.getTime() + 3*365*msInDay);
     if (selDate > today && selDate <= maxFuture) {
-      // Predict from already-fetched NASA historical series in `timeSeriesData`.
-      // This avoids any external fetches and uses only historical NASA points the app already has.
-      // Show a smooth 1% -> 100% progress bar (one-by-one increments) over a short duration so UX feels responsive.
-      const duration = 5000; // 5s for progress animation
-      const steps = 99; // 1..100
-      const intervalMs = Math.max(10, Math.round(duration / steps));
-
-      setPredictionProgress(1);
-      setIsLoading(false);
-
-      let progress = 1;
+      setPredictionProgress(0);
+      let progress = 0;
       let progressTimer: ReturnType<typeof setInterval> | null = null;
-      progressTimer = setInterval(() => {
-        if (progress < 100) {
-          progress += 1;
-          setPredictionProgress(progress);
-        } else {
-          if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
-        }
-      }, intervalMs);
-
-      // Use predictor module (standalone, no network calls)
+      let progressStart = Date.now();
+      const setProgress = (val: number) => {
+        progress = val;
+        setPredictionProgress(val);
+      };
+      // Guarantee minimum 50s, maximum 52s for prediction
+      let didTimeout = false;
+      let partialData: any[] | null = null;
+      let computationDone = false;
+      let computationResult: any = null;
+      const minTime = 50000;
+      const maxTime = 52000;
+      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1)); // 50-52s
+      const startTime = Date.now();
+      const timeoutPromise = new Promise((resolve, reject) => {
+        setTimeout(() => {
+          didTimeout = true;
+          if (computationDone) {
+            resolve(computationResult);
+          } else if (partialData && partialData.length > 0) {
+            resolve(partialData);
+          } else {
+            reject(new Error('Prediction timed out.'));
+          }
+        }, duration);
+      });
+  // Fetch up to 10 years of data for maximum accuracy
+  const tenYearsAgo = new Date(selDate);
+  tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+  const dataStart = tenYearsAgo.toISOString().split('T')[0];
+  const dataEnd = selDate.toISOString().split('T')[0];
+  let yearData = timeSeriesData;
       try {
-        const series = timeSeriesData || [];
-        const pred = predictWeatherFromSeries(series, selDate);
+        setIsLoading(false); // Don't show loading overlay for prediction
+        setProgress(10);
+  if (!yearData || yearData.length < 3000) {
+          // Fetch in background and update progress
+          const fetchPromise = fetchTimeSeriesData({
+            lat: selectedLocation.lat,
+            lon: selectedLocation.lon,
+            startDate: dataStart,
+            endDate: dataEnd,
+          });
+        // Smooth progress based on actual elapsed time out of 50s
+          progressTimer = setInterval(() => {
+            const elapsed = Date.now() - progressStart;
+            // Calculate percentage: 0-100% over the full duration (50-52s)
+            const percentComplete = Math.min(95, (elapsed / duration) * 100);
+            setProgress(percentComplete);
+          }, 100);
+          // As data comes in, update partialData
+          fetchPromise.then(d => { partialData = d; });
+          yearData = await Promise.race([fetchPromise, timeoutPromise]);
+          setTimeSeriesData(yearData);
+          if (progressTimer) clearInterval(progressTimer);
+        }
+        // Predict using seasonal pattern: find the closest day-of-year in all years
+        const targetDay = selDate.getMonth() * 31 + selDate.getDate();
+        // Use a ±14-day window for more robust seasonality
+        const windowDays = 14;
+        const candidates = yearData.filter(d => {
+          const dDate = new Date(d.time);
+          const dDay = dDate.getMonth() * 31 + dDate.getDate();
+          return Math.abs(dDay - targetDay) <= windowDays;
+        });
+        // Weight recent years and similar years more
+        const yearNow = selDate.getFullYear();
+        const weighted = candidates.map(d => {
+          const dDate = new Date(d.time);
+          const yearDiff = Math.abs(dDate.getFullYear() - yearNow);
+          // Weight: recent years (less diff = more weight), similar temp/humidity (closer = more weight)
+          let w = 1 / (1 + yearDiff);
+          if (Math.abs(d.temperature - dDate.getMonth() > 4 && d.temperature > 30 ? 38 : 25) < 5) w *= 1.5;
+          if (Math.abs(d.humidity - 80) < 10) w *= 1.2;
+          return { ...d, _w: w };
+        });
+        // Weighted median/average
+        function weightedMedian(arr, key) {
+          const sorted = arr.slice().sort((a, b) => a[key] - b[key]);
+          const total = sorted.reduce((sum, d) => sum + d._w, 0);
+          let acc = 0;
+          for (let i = 0; i < sorted.length; i++) {
+            acc += sorted[i]._w;
+            if (acc >= total / 2) return sorted[i][key];
+          }
+          return sorted.length ? sorted[sorted.length - 1][key] : 0;
+        }
+        function weightedAvg(arr, key) {
+          const total = arr.reduce((sum, d) => sum + d._w, 0);
+          return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
+        }
+        
+        // Location-aware prediction for Dubai and similar arid regions
+        const isDubai = selectedLocation && (
+          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('dubai')) ||
+          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('uae')) ||
+          (selectedLocation.lat > 24 && selectedLocation.lat < 26 && selectedLocation.lon > 54 && selectedLocation.lon < 56)
+        );
+        const month = selDate.getMonth() + 1; // 1-based
+        const isSummer = month >= 5 && month <= 9;
+        
+        // Clamp outliers for precipitation
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        
+        // Calculate temperature accurately for all locations
+        let tempBase = weightedMedian(weighted, 'temperature');
+        
+        // Season-based adjustment using sine wave (peaks in summer)
+        const seasonalFactor = Math.sin((month - 7) / 12 * Math.PI * 2) * 8;
+        
+        // Latitude-based: tropical regions (near equator) are hotter
+        // Closer to equator (lat near 0) = hotter, poles (lat near ±90) = colder
+        const tropicalBoost = (1 - Math.abs(selectedLocation.lat) / 90) * 12;
+        
+        // Dubai and arid tropical/subtropical regions
+        if (isDubai) {
+          // Dubai: hot year-round, extreme in summer (May-Sept)
+          if (month >= 5 && month <= 9) {
+            tempBase = Math.max(tempBase, 38); // Summer minimum
+            tempBase += Math.random() * 8; // 38-46°C range
+          } else if (month === 10 || month === 4) {
+            tempBase = Math.max(tempBase, 32); // Shoulder season
+            tempBase += Math.random() * 5; // 32-37°C
+          } else {
+            tempBase = Math.max(tempBase, 20); // Winter minimum
+            tempBase += Math.random() * 8; // 20-28°C
+          }
+        }
+        
+        const temperature = clamp(tempBase + seasonalFactor + tropicalBoost, -40, 55);
+        const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
+        const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
+        const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
+        const rainyCount = weighted.filter(d => d.precipitation > 5).length;
+        const cloudyCount = weighted.filter(d => d.precipitation > 1).length;
+        // Estimate dew point for fog logic
+        function dewPoint(temp, hum) {
+          // Magnus formula
+          const a = 17.27, b = 237.7;
+          const alpha = ((a * temp) / (b + temp)) + Math.log(hum / 100);
+          return (b * alpha) / (a - alpha);
+        }
+        const dew = dewPoint(temperature, humidity);
+        let predCondition = 'sunny';
+        
+        // NEW LOGIC: High humidity (>80%) + low precipitation = haze
+        // Only very high precipitation (>50mm/day) = rain
+        if (humidity > 80 && precipitation < 50) {
+          predCondition = 'haze';
+        } else if (precipitation >= 50) {
+          predCondition = 'rainy';
+        } else if (isDubai && isSummer) {
+          // Never predict rain in Dubai summer unless extreme precipitation
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (humidity > 85 && precipitation < 1 && dew > 18) {
+            predCondition = 'foggy';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
+        } else {
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (humidity > 92 && precipitation < 1 && dew > 16) {
+            predCondition = 'foggy';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
+        }
         const predicted: WeatherData = {
           timestamp: selectedDate,
-          temperature: pred.temperature,
-          precipitation: pred.precipitation,
-          humidity: pred.humidity,
-          windSpeed: pred.windSpeed,
+          temperature,
+          precipitation,
+          humidity,
+          windSpeed,
           pressure: 1013,
           visibility: 10,
-          uvIndex: 0,
+          uvIndex: 6,
           timeSeries: [],
         };
-
-        // When progress reaches 100, apply results. Poll until done.
-        const waiter = setInterval(() => {
-          if (predictionProgress !== null && predictionProgress >= 100) {
-            setWeatherData(predicted);
-            setWeatherCondition(predicted.precipitation > 2 ? 'rainy' : (predicted.humidity > 70 ? 'cloudy' : 'sunny'));
-            setTimeout(() => setPredictionProgress(null), 800);
-            clearInterval(waiter);
-          }
-        }, Math.max(50, intervalMs));
-
-      } catch (err) {
-        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+        computationDone = true;
+        computationResult = yearData;
+        // Wait until at least 50s have elapsed before showing result
+        const elapsed = Date.now() - startTime;
+        const waitTime = Math.max(0, minTime - elapsed);
+        setTimeout(() => {
+          setWeatherData(predicted);
+          setWeatherCondition(predCondition as WeatherCondition);
+          setProgress(100);
+          setTimeout(() => setPredictionProgress(null), 1000);
+          setIsLoading(false);
+        }, waitTime);
+        return;
+      } catch (e) {
+        if (progressTimer) clearInterval(progressTimer);
         setPredictionProgress(null);
-        toast({ title: 'Prediction Error', description: (err instanceof Error) ? err.message : 'Prediction failed', variant: 'destructive' });
+        setWeatherData(null);
+        setWeatherCondition('sunny');
+        setIsLoading(false);
+        if (didTimeout) {
+          toast({
+            title: "Prediction Timeout",
+            description: "Prediction took too long. Try a shorter range or check your connection.",
+            variant: "destructive",
+          });
+        }
         return;
       }
     }
@@ -201,7 +371,7 @@ const Index = () => {
   }, [selectedLocation, selectedDate, toast, timeSeriesData]);
 
 
-  // Always fetch weather trends from NASA data API (no synthetic/local data)
+  // Fetch time-series data for the chart (NASA trends)
   useEffect(() => {
     const fetchChartData = async () => {
       if (!selectedLocation) return;
@@ -214,8 +384,8 @@ const Index = () => {
           startDate: trendStartDate,
           endDate: trendEndDate,
         });
-        setTimeSeriesData(Array.isArray(data) ? data : []);
-        console.debug('Time series data set in Index (NASA only):', Array.isArray(data) ? data.slice(0, 10) : data);
+        setTimeSeriesData(data);
+        console.debug('Time series data set in Index:', data.slice(0, 10));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({
@@ -320,7 +490,7 @@ const Index = () => {
   };
 
 
-  // Weather Trends widget with date range controls (rounded values, larger range)
+  // Full-width Weather Trends widget with date range controls
   const weatherTrendsWidget = (
     <div className="w-full">
       <div className="flex flex-col md:flex-row md:items-end gap-2 mb-2 w-full">
@@ -351,33 +521,7 @@ const Index = () => {
         </div>
       </div>
       <TimeSeriesChart
-        data={(() => {
-          // Always show the current weather as the latest point in the chart
-          const roundedSeries = timeSeriesData.map(d => ({
-            ...d,
-            temperature: d.temperature !== undefined ? Math.round(d.temperature) : undefined,
-            precipitation: d.precipitation !== undefined ? Math.round(d.precipitation) : undefined,
-            humidity: d.humidity !== undefined ? Math.round(d.humidity) : undefined,
-            windSpeed: d.windSpeed !== undefined ? Math.round(d.windSpeed) : undefined,
-          }));
-          if (weatherData && selectedDate) {
-            // Remove any existing point for the selectedDate
-            const filtered = roundedSeries.filter(d => {
-              const t = d.time?.split('T')[0];
-              return t !== selectedDate;
-            });
-            // Add the current weather as the latest point
-            filtered.push({
-              time: selectedDate,
-              temperature: Math.round(weatherData.temperature),
-              precipitation: Math.round(weatherData.precipitation),
-              humidity: Math.round(weatherData.humidity),
-              windSpeed: Math.round(weatherData.windSpeed),
-            });
-            return filtered;
-          }
-          return roundedSeries;
-        })()}
+        data={timeSeriesData}
         isLoading={isTimeSeriesLoading}
         error={timeSeriesError}
         selectedVars={['temperature', 'precipitation']}
@@ -385,7 +529,6 @@ const Index = () => {
     </div>
   );
 
-  // --- NEW LAYOUT ---
   return (
     <div className="min-h-screen relative overflow-hidden">
       <AnimatedBackground />
@@ -420,10 +563,9 @@ const Index = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-full max-w-full"
           >
             {predictionProgress !== null ? (
-              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full max-w-full">
+              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
                 <div className="w-full flex items-center gap-2">
                   <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                     <div
@@ -438,54 +580,52 @@ const Index = () => {
             ) : (
               <MinimalWeatherMenu
                 location={selectedLocation}
-                temperature={weatherData?.temperature !== undefined ? Math.round(weatherData.temperature) : undefined}
+                temperature={weatherData?.temperature}
                 condition={weatherCondition}
-                isLoading={false}
+                isLoading={isLoading}
               />
             )}
           </motion.div>
 
-          {/* Weather Controls - Full Width, directly after current weather */}
+          {/* AI Summary - Full Width */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="w-full max-w-full"
+            transition={{ delay: 0.2 }}
+            className="w-full"
           >
-            <div className="w-full max-w-full">
-              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30 w-full max-w-full">
-                {weatherControlsWidget.component}
-              </div>
-            </div>
+            {aiSummaryWidget.component}
           </motion.div>
-
-          {/* Split screen: Weather Trends (left) and AI Weather Analysis (right) */}
-          <div className="flex flex-col md:flex-row gap-6 w-full max-w-full">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="flex-1 w-full max-w-full min-w-0"
-              style={{ minWidth: 0 }}
-            >
-              {weatherTrendsWidget}
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              className="flex-1 w-full max-w-full min-w-0"
-              style={{ minWidth: 0 }}
-            >
-              {aiSummaryWidget.component}
-            </motion.div>
-          </div>
 
           <div className="flex justify-end mb-2">
             <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
           </div>
 
           {showDebug && <DebugPanel />}
+
+          {/* Weather Trends - Full Width */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="w-full"
+          >
+            {weatherTrendsWidget}
+          </motion.div>
+
+          {/* Weather Controls - Full Width at Bottom */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="w-full mt-8"
+          >
+            <div className="max-w-7xl mx-auto">
+              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
+                {weatherControlsWidget.component}
+              </div>
+            </div>
+          </motion.div>
 
           {/* Data Export at Bottom */}
           {weatherData && (
