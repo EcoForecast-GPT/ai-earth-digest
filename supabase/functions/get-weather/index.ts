@@ -74,24 +74,19 @@ serve(async (req: Request) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
       const proxyUrl = `${supabaseUrl}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
       
-      // Extract the apikey from the incoming request and use it for both headers
-      const apikey = req.headers.get('apikey') || '';
+      // Pass through all the original request headers
+      const headers = new Headers();
+      for (const [key, value] of req.headers.entries()) {
+        headers.set(key, value);
+      }
       
       console.log('Making proxy request:', {
         url: proxyUrl,
-        headers: {
-          Authorization: `Bearer ${apikey}`,
-          apikey: apikey
-        }
+        headers: Object.fromEntries(headers.entries())
       });
       
-      // We'll fetch the proxy using apikey for both headers (this is how Supabase Edge Functions expect it)
-      const proxyResp = await fetch(proxyUrl, {
-        headers: {
-          'Authorization': `Bearer ${apikey}`,
-          'apikey': apikey
-        }
-      });
+      // Make the request with all original headers
+      const proxyResp = await fetch(proxyUrl, { headers });
       
       console.log('Proxy response:', {
         status: proxyResp.status,
