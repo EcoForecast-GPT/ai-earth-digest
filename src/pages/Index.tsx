@@ -95,22 +95,24 @@ const Index = () => {
     const msInDay = 24*60*60*1000;
     const maxFuture = new Date(today.getTime() + 3*365*msInDay);
     if (selDate > today && selDate <= maxFuture) {
-      setPredictionProgress(0);
-      let progress = 0;
+      // Initialize progress state
+      setPredictionProgress(1); // Start at 1%
+      let currentProgress = 1;
       let progressTimer: ReturnType<typeof setInterval> | null = null;
-      let progressStart = Date.now();
-      const setProgress = (val: number) => {
-        progress = val;
-        setPredictionProgress(val);
-      };
-      // Guarantee minimum 50s, maximum 52s for prediction
+      const computationStart = Date.now();
+      
+      // Constants for smooth progress animation
+      const minTime = 50000; // 50 seconds minimum
+      const maxTime = 52000; // 52 seconds maximum
+      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1));
+      const updateInterval = 50; // Update every 50ms for smooth animation
+      const progressSteps = 98; // We'll go from 1% to 99% in small increments
+      const progressIncrement = 98 / (duration / updateInterval); // How much to increment each step
+      
       let didTimeout = false;
       let partialData: any[] | null = null;
       let computationDone = false;
       let computationResult: any = null;
-      const minTime = 50000;
-      const maxTime = 52000;
-      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1)); // 50-52s
       const startTime = Date.now();
       const timeoutPromise = new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -132,8 +134,16 @@ const Index = () => {
   let yearData = timeSeriesData;
       try {
         setIsLoading(false); // Don't show loading overlay for prediction
-        setProgress(10);
-  if (!yearData || yearData.length < 3000) {
+        
+        // Start smooth progress animation
+        progressTimer = setInterval(() => {
+          if (currentProgress < 99) {
+            currentProgress += progressIncrement;
+            setPredictionProgress(Math.min(99, currentProgress));
+          }
+        }, updateInterval);
+
+        if (!yearData || yearData.length < 3000) {
           // Fetch in background and update progress
           const fetchPromise = fetchTimeSeriesData({
             lat: selectedLocation.lat,
@@ -141,13 +151,6 @@ const Index = () => {
             startDate: dataStart,
             endDate: dataEnd,
           });
-        // Smooth progress based on actual elapsed time out of 50s
-          progressTimer = setInterval(() => {
-            const elapsed = Date.now() - progressStart;
-            // Calculate percentage: 0-100% over the full duration (50-52s)
-            const percentComplete = Math.min(95, (elapsed / duration) * 100);
-            setProgress(percentComplete);
-          }, 100);
           // As data comes in, update partialData
           fetchPromise.then(d => { partialData = d; });
           yearData = await Promise.race([fetchPromise, timeoutPromise]);
@@ -214,16 +217,19 @@ const Index = () => {
         
         // Dubai and arid tropical/subtropical regions
         if (isDubai) {
-          // Dubai: hot year-round, extreme in summer (May-Sept)
-          if (month >= 5 && month <= 9) {
-            tempBase = Math.max(tempBase, 38); // Summer minimum
-            tempBase += Math.random() * 8; // 38-46°C range
-          } else if (month === 10 || month === 4) {
-            tempBase = Math.max(tempBase, 32); // Shoulder season
-            tempBase += Math.random() * 5; // 32-37°C
-          } else {
-            tempBase = Math.max(tempBase, 20); // Winter minimum
-            tempBase += Math.random() * 8; // 20-28°C
+          // Dubai: temperatures based on historical averages
+          if (month >= 6 && month <= 8) {
+            tempBase = 38 + (Math.random() * 4); // Summer: 38-42°C
+          } else if (month === 9) {
+            tempBase = 36 + (Math.random() * 4); // September: 36-40°C
+          } else if (month === 5) {
+            tempBase = 35 + (Math.random() * 4); // May: 35-39°C
+          } else if (month === 10) {
+            tempBase = 32 + (Math.random() * 4); // October: 32-36°C
+          } else if (month === 4) {
+            tempBase = 31 + (Math.random() * 4); // April: 31-35°C
+          } else if (month >= 11 || month <= 3) {
+            tempBase = 24 + (Math.random() * 4); // Winter: 24-28°C
           }
         }
         
@@ -290,12 +296,18 @@ const Index = () => {
         computationResult = yearData;
         // Wait until at least 50s have elapsed before showing result
         const elapsed = Date.now() - startTime;
-        const waitTime = Math.max(0, minTime - elapsed);
+        const waitTime = Math.max(0, minTime - (Date.now() - computationStart));
         setTimeout(() => {
-          setWeatherData(predicted);
-          setWeatherCondition(predCondition as WeatherCondition);
-          setProgress(100);
-          setTimeout(() => setPredictionProgress(null), 1000);
+          // Smoothly complete the progress
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            // Ensure we hit 100% smoothly
+            setPredictionProgress(100);
+            setWeatherData(predicted);
+            setWeatherCondition(predCondition as WeatherCondition);
+            // Clear the progress after a brief pause
+            setTimeout(() => setPredictionProgress(null), 1000);
+          }
           setIsLoading(false);
         }, waitTime);
         return;
