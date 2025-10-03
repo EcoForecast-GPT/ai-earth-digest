@@ -283,8 +283,16 @@ const WeatherControls = ({
         />
       )}
     </motion.div>
-
   );
-}
+
+      {weatherData.length > 0 && (
+        <DataExport 
+          weatherData={weatherData}
+          location={location}
+          dateRange={{start: date, end: date}}
+        />
+      )}
+    </motion.div>
+  );
 
 export default WeatherControls;
