@@ -11,6 +11,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey",
 };
 
+const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG';
+const EARTHDATA_TOKEN = 'eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOiJFYXJ0aGRhdGEgTG9naW4iLCJzaWciOiJlZGxqd3RwdWJrZXlfb3BzIiwiYWxnIjoiUlMyNTYifQ.eyJ0eXBlIjoiVXNlciIsInVpZCI6InNocmVzdGgwOTAxIiwiZXhwIjoxNzY0NTY3MTE4LCJpYXQiOjE3NTkzODMxMTgsImlzcyI6Imh0dHBzOi8vdXJzLmVhcnRoZGF0YS5uYXNhLmdvdiIsImlkZW50aXR5X3Byb3ZpZGVyIjoiZWRsX29wcyIsImFjciI6ImVkbCIsImFzc3VyYW5jZV9sZXZlbCI6M30.1DtnKV8tU2kCNy-hlKImBIurffJl7uOe48H732nHDIV5uZJWeA4NI05o0fb0g9ux5ikc5nNFHaAPq5PFn-NPdEA2ErCzZBPGXmycYqiz3cuv9cGY5JevObzzpoJt5Nr4eVAqCVMDarI1KIWFcvvYs57bQEMTMU9bTbQxOAehN4sT-cQwWNY-vq1Qvfpk67K1wWz6KdN4TQ_1M0ZY4O8kzYTAJir6yrIVj4H_OYCMOLZhMkpyZyv_p961oNtC8WeeE1pPyehzkSF9eZMHCelYs689fCYxnJTjYPPIM9F2lhUNesm5E5_cddinnz1QcoHv6B8eUEJJwvkQehGBVLwrww';
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -32,6 +35,10 @@ serve(async (req: Request) => {
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
     const isFuture = startDateObj > now || endDateObj > now;
+
+    // Convert dates to NASA DISC API format (YYYYMMDD)
+    const nasaStartDate = startDate.replace(/-/g, '');
+    const nasaEndDate = endDate.replace(/-/g, '');
 
     if (isFuture) {
       // For future dates, return synthetic data based on climatology
@@ -75,11 +82,12 @@ serve(async (req: Request) => {
       });
     }
 
-    // For historical dates, use NASA POWER API
-    const nasaUrl = `https://power.larc.nasa.gov/api/temporal/hourly/point?parameters=T2M,PRECTOT,RH2M,WS2M&community=RE&longitude=${lon}&latitude=${lat}&start=${startDate}&end=${endDate}&format=JSON`;
+    // For historical dates, use NASA DISC API
+    const nasaUrl = `https://disc.gsfc.nasa.gov/api/search/temporal/point?parameters=T2M,PRECTOT,RH2M,WS2M&longitude=${lon}&latitude=${lat}&start=${nasaStartDate}&end=${nasaEndDate}&format=JSON`;
     
     const response = await fetch(nasaUrl, {
       headers: {
+        'Authorization': `Bearer ${EARTHDATA_TOKEN}`,
         'Accept': 'application/json'
       }
     });
