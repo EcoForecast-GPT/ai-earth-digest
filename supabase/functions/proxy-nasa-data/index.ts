@@ -144,20 +144,41 @@ serve(async (req: Request) => {
 
     const weatherData = await resp.json();
     
-    // If missing required structure, return valid empty structure
+    // If missing required structure, fallback to synthetic data
     if (!weatherData.properties || !weatherData.properties.parameter) {
       console.error('NASA API returned unexpected structure:', JSON.stringify(weatherData, null, 2));
-      return new Response(JSON.stringify({
-        error: 'Missing required parameters in NASA POWER API response',
-        nasaRaw: weatherData,
+      // Use the same synthetic data logic as for future dates
+      const now = new Date();
+      const url = new URL(req.url);
+      const { lat, lon, startDate, endDate } = Object.fromEntries(url.searchParams.entries());
+      const startDateObj = new Date(startDate);
+      const endDateObj = new Date(endDate);
+      const hours = Math.floor((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60));
+      interface ParameterData { [key: string]: number; }
+      const syntheticData = {
         properties: {
           parameter: {
-            T2M: {},
-            PRECTOT: {},
-            RH2M: {},
-            WS2M: {}
+            T2M: {} as ParameterData,
+            PRECTOT: {} as ParameterData,
+            RH2M: {} as ParameterData,
+            WS2M: {} as ParameterData
           }
         }
+      };
+      for (let i = 0; i <= hours; i++) {
+        const timestamp = new Date(startDateObj.getTime() + i * 60 * 60 * 1000);
+        const timeKey = timestamp.toISOString().split('.')[0];
+        const hourOfDay = timestamp.getUTCHours();
+        const isDaytime = hourOfDay >= 6 && hourOfDay <= 18;
+        syntheticData.properties.parameter.T2M[timeKey] = isDaytime ? 25 + Math.random() * 5 : 15 + Math.random() * 5;
+        syntheticData.properties.parameter.PRECTOT[timeKey] = Math.random() < 0.3 ? Math.random() * 2 : 0;
+        syntheticData.properties.parameter.RH2M[timeKey] = isDaytime ? 50 + Math.random() * 20 : 70 + Math.random() * 20;
+        syntheticData.properties.parameter.WS2M[timeKey] = 2 + Math.random() * 3;
+      }
+      return new Response(JSON.stringify({
+        error: 'Missing required parameters in NASA POWER API response, using synthetic data',
+        synthetic: true,
+        properties: syntheticData.properties
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
