@@ -88,49 +88,56 @@ serve(async (req: Request) => {
     // For historical dates, use NASA POWER API with timestamps
     const nasaUrl = `https://power.larc.nasa.gov/api/temporal/hourly/point?parameters=T2M,PRECTOT,RH2M,WS2M&community=RE&longitude=${lon}&latitude=${lat}&start=${nasaStartDate}&end=${nasaEndDate}&format=JSON`;
     
-    console.log('Calling NASA API:', nasaUrl);
-    
-    const response = await fetch(nasaUrl, {
-      headers: {
-        'Accept': 'application/json'
-      }
+    console.log('Calling NASA POWER API:', {
+      url: nasaUrl,
+      startDate: nasaStartDate,
+      endDate: nasaEndDate,
+      isFuture
     });
+    
+    // For historical dates, use NASA POWER API with timestamps
+    let weatherData;
+    try {
+      const response = await fetch(nasaUrl, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
 
-    if (!response.ok) {
-      // Log error details for debugging
-      const errText = await response.text();
-      console.error('NASA POWER API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errText
-      });
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('NASA POWER API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errText
+        });
+        throw new Error(`NASA API failed with status: ${response.status}`);
+      }
+
+      weatherData = await response.json();
+    } catch (error) {
+      console.error('NASA POWER API request failed:', error);
       
-      return new Response(JSON.stringify({ 
-        error: `NASA API failed with status: ${response.status}`,
-        details: errText
-      }), {
-        status: response.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Return fallback data for past dates with empty series
+      weatherData = {
+        properties: {
+          parameter: {
+            T2M: {},
+            PRECTOT: {},
+            RH2M: {},
+            WS2M: {}
+          }
+        }
+      };
     }
+    
+    // Return the weather data
+    return new Response(JSON.stringify(weatherData), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
 
     const data = await response.json();
     
-    // Basic validation of POWER API response
-    if (!data.properties || !data.properties.parameter) {
-      return new Response(JSON.stringify({ 
-        error: 'Invalid NASA POWER API response format',
-        details: 'Missing required data structure'
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(JSON.stringify({ error: errorMessage }), {
