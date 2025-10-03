@@ -1,6 +1,19 @@
 // Stateless predictor utilities that generate a deterministic forecast from historical series
 // The functions here use only local historical points (timeSeries) and do not perform network I/O.
 
+export interface PredictorResult {
+  temperature: number;
+  precipitation: number;
+  humidity: number;
+  windSpeed: number;
+  _debug?: {
+    rawData?: any;
+    trendWeight?: number;
+    seasonalMean?: number;
+    trendPrediction?: number;
+  };
+}
+
 type Point = {
   time: string; // ISO timestamp
   temperature?: number;
@@ -32,22 +45,55 @@ const linearRegression = (xs: number[], ys: number[]) => {
   return { a, b };
 };
 
-export const predictWeatherFromSeries = (series: Point[], targetDate: Date) => {
+// Clamp temperature within valid range and apply reasonable fallback
+const clampTemperature = (tempC: number, fallbackC: number | null = null) => {
+  if (!isValidTemperature(tempC)) {
+    if (DEBUG) {
+      console.warn(`Invalid temperature prediction: ${tempC}°C - using fallback: ${fallbackC}°C`);
+    }
+    return fallbackC !== null && isValidTemperature(fallbackC) ? fallbackC : 20; // Default safe temp
+  }
+  return Math.max(MIN_TEMP_C, Math.min(MAX_TEMP_C, tempC));
+};
+
+// Temperature range validation in Celsius (-60°C to +60°C)
+const MIN_TEMP_C = -60;
+const MAX_TEMP_C = 60;
+
+export const isValidTemperature = (tempC: number) => {
+  return !isNaN(tempC) && tempC >= MIN_TEMP_C && tempC <= MAX_TEMP_C;
+};
+
+// Import temperature conversion from weather service to ensure consistency
+import { kelvinToCelsius, DEBUG } from '@/services/nasaWeatherService';
+
+export const predictWeatherFromSeries = (series: Point[], targetDate: Date): PredictorResult => {
   const targetDoy = dayOfYear(targetDate);
   const targetYear = targetDate.getFullYear();
 
-  // map series to {doy, year, temperature, precipitation, humidity, wind}
+  // Debug logging
+  if (DEBUG) {
+    console.log('Predictor input:', {
+      seriesLength: series.length,
+      targetDate: targetDate.toISOString(),
+      firstPoint: series[0],
+      lastPoint: series[series.length - 1],
+    });
+  }
+
+  // Map series to {doy, year, temperature, precipitation, humidity, wind}
+  // Temperature is expected to be in Kelvin from NASA API
   const mapped = series
     .map(p => ({
       time: p.time,
       doy: p.time ? dayOfYear(new Date(p.time)) : null,
       year: p.time ? new Date(p.time).getFullYear() : null,
-      temperature: typeof p.temperature === 'number' ? p.temperature : null,
+      temperature: typeof p.temperature === 'number' ? kelvinToCelsius(p.temperature) : null,
       precipitation: typeof p.precipitation === 'number' ? p.precipitation : null,
       humidity: typeof p.humidity === 'number' ? p.humidity : null,
       windSpeed: typeof p.windSpeed === 'number' ? p.windSpeed : null,
     }))
-    .filter(p => p.doy !== null && p.year !== null);
+    .filter(p => p.doy !== null && p.year !== null && p.temperature !== null);
 
   // Collect neighborhood points within windowDays (wrap around year)
   const windowDays = 15; // larger window for smoother seasonal estimate
@@ -106,12 +152,27 @@ export const predictWeatherFromSeries = (series: Point[], targetDate: Date) => {
   const seasonalTemps = effective.filter(p => p.temperature !== null).map(p => p.temperature as number);
   const seasonalMean = seasonalTemps.length ? seasonalTemps.reduce((s, v) => s + v, 0) / seasonalTemps.length : trendPredTemp || seasonalTemps[0] || 0;
 
-  // Blend trend and seasonal mean: if trend exists, weight by number of years
+  // Blend trend and seasonal mean with validation
   const yearsCount = yearTemps.length;
   let finalTemp = seasonalMean;
+  
+  if (DEBUG) {
+    console.log('Prediction computation:', {
+      seasonalMean,
+      trendPredTemp,
+      yearsCount,
+      targetYear,
+      targetDoy,
+      effectivePoints: effective.length
+    });
+  }
+
   if (yearsCount >= 2) {
     const trendWeight = Math.min(0.7, 0.3 + Math.log1p(yearsCount) * 0.05);
-    finalTemp = seasonalMean * (1 - trendWeight) + trendPredTemp * trendWeight;
+    const blendedTemp = seasonalMean * (1 - trendWeight) + trendPredTemp * trendWeight;
+    
+    // Validate and clamp the blended temperature
+    finalTemp = clampTemperature(blendedTemp, seasonalMean);
   }
 
   // Precipitation: median of effective
@@ -133,6 +194,33 @@ export const predictWeatherFromSeries = (series: Point[], targetDate: Date) => {
 
   const humidity = Math.round(weightedAvg(effective.map(p => p.humidity !== null ? p.humidity as number : null)));
   const windSpeed = Math.round((weightedAvg(effective.map(p => p.windSpeed !== null ? p.windSpeed as number : null))) * 10) / 10;
+  
+  // Construct result with debug info if enabled
+  const result: PredictorResult = {
+    temperature: finalTemp,
+    precipitation: medianPrecip,
+    humidity,
+    windSpeed,
+    ...(DEBUG && {
+      _debug: {
+        rawData: {
+          yearsCount,
+          effectivePoints: effective.length,
+          targetDoy,
+          targetYear
+        },
+        seasonalMean,
+        trendPrediction: trendPredTemp,
+        trendWeight: yearsCount >= 2 ? Math.min(0.7, 0.3 + Math.log1p(yearsCount) * 0.05) : 0
+      }
+    })
+  };
+
+  if (DEBUG) {
+    console.log('Prediction result:', result);
+  }
+
+  return result;
 
   // Apply light smoothing and clamps
   const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
