@@ -570,9 +570,10 @@ const Index = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
+            className="w-full max-w-full"
           >
             {predictionProgress !== null ? (
-              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
+              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full max-w-full">
                 <div className="w-full flex items-center gap-2">
                   <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                     <div
@@ -589,7 +590,7 @@ const Index = () => {
                 location={selectedLocation}
                 temperature={weatherData?.temperature !== undefined ? Math.round(weatherData.temperature) : undefined}
                 condition={weatherCondition}
-                isLoading={isLoading}
+                isLoading={false}
               />
             )}
           </motion.div>
@@ -599,22 +600,22 @@ const Index = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="w-full"
+            className="w-full max-w-full"
           >
-            <div className="max-w-7xl mx-auto">
-              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
+            <div className="w-full max-w-full">
+              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30 w-full max-w-full">
                 {weatherControlsWidget.component}
               </div>
             </div>
           </motion.div>
 
           {/* Split screen: Weather Trends (left) and AI Weather Analysis (right) */}
-          <div className="flex flex-col md:flex-row gap-6 w-full">
+          <div className="flex flex-col md:flex-row gap-6 w-full max-w-full">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="flex-1"
+              className="flex-1 w-full max-w-full"
             >
               {weatherTrendsWidget}
             </motion.div>
@@ -622,7 +623,7 @@ const Index = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
-              className="flex-1"
+              className="flex-1 w-full max-w-full"
             >
               {aiSummaryWidget.component}
             </motion.div>
