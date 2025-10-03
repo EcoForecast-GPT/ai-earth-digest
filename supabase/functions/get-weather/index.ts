@@ -82,13 +82,28 @@ serve(async (req: Request) => {
         'Accept': 'application/json'
       });
       
+      console.log('Original request headers:', {
+        authorization: req.headers.get('Authorization'),
+        apikey: req.headers.get('apikey')
+      });
+
+      // Make sure we pass through the apikey exactly as received
       console.log('Making proxy request:', {
         url: proxyUrl,
-        headers: Object.fromEntries(headers.entries())
+        headers: {
+          authorization: apikey ? `Bearer ${apikey}` : '',
+          apikey: apikey,
+        }
       });
       
       // Make the request with authorization headers
-      const proxyResp = await fetch(proxyUrl, { headers });
+      const proxyResp = await fetch(proxyUrl, { 
+        headers: {
+          'Authorization': apikey ? `Bearer ${apikey}` : '',
+          'apikey': apikey,
+          'Accept': 'application/json'
+        }
+      });
       
       console.log('Proxy response:', {
         status: proxyResp.status,

@@ -21,6 +21,11 @@ serve(async (req: Request) => {
   }
 
   // Check authorization
+  console.log('Received headers:', {
+    authorization: req.headers.get('Authorization'),
+    apikey: req.headers.get('apikey')
+  });
+  
   const apiKey = req.headers.get('apikey');
   if (!apiKey) {
     return new Response(JSON.stringify({ error: 'Missing API key' }), {
@@ -132,8 +137,6 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify(weatherData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
-
-    const data = await response.json();
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
