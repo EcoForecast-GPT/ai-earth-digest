@@ -61,35 +61,49 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
       } catch (e) {
         // ignore
       }
-      console.debug('Proxy JSON response:', body);
-      // Only use real NASA data, no synthetic values
-      if (Array.isArray(body.series)) {
-        const parsed = body.series.map((s: any) => {
-          // Convert from Kelvin to Celsius if needed
-          let temp = s.tempK ? s.tempK - 273.15 : s.temperature;
-          // If the temperature is unreasonable, skip this point
-          if (temp < -50 || temp > 60) return null;
+      console.debug('NASA POWER API response:', body);
+      
+      if (body.properties && body.properties.parameter) {
+        const params = body.properties.parameter;
+        const timestamps = Object.keys(params.T2M);
+        
+        const parsed = timestamps.map(timestamp => {
+          // T2M is in Celsius, no conversion needed
+          const temp = params.T2M[timestamp];
+          if (temp === -999 || temp < -50 || temp > 60) return null;
           
-          // Convert precipitation to mm if needed
-          let precip = s.precipMm ?? s.precipitation ?? 0;
-          // Skip negative precipitation values
-          if (precip < 0) precip = 0;
+          // PRECTOT is in mm/hour
+          const precip = params.PRECTOT[timestamp];
+          if (precip === -999 || precip < 0) return null;
+          
+          // RH2M is relative humidity (%)
+          const humidity = params.RH2M[timestamp];
+          if (humidity === -999 || humidity < 0 || humidity > 100) return null;
+          
+          // WS2M is wind speed at 2 meters (m/s)
+          const windSpeed = params.WS2M[timestamp];
+          if (windSpeed === -999 || windSpeed < 0) return null;
+          
+          const isoTime = new Date(`${timestamp.split(':')[0]}Z`).toISOString();
           
           return {
-            time: s.timestamp || s.time,
-            temperature: Math.round(temp * 10) / 10, // Round to 1 decimal
-            precipitation: Math.round(precip * 10) / 10, // Round to 1 decimal
-            windSpeed: s.windSpeed ? Math.round(s.windSpeed * 10) / 10 : undefined,
-            humidity: s.humidity ? Math.round(s.humidity) : undefined,
+            time: isoTime,
+            temperature: Math.round(temp * 10) / 10,
+            precipitation: Math.round(precip * 10) / 10,
+            windSpeed: Math.round(windSpeed * 10) / 10,
+            humidity: Math.round(humidity)
           };
-        }).filter(point => point !== null); // Remove any invalid points
+        }).filter(point => point !== null);
+
+        // Sort by time
+        parsed.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
         
         // Sort by time
         parsed.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
         
         return parsed;
       }
-      throw new Error('No valid NASA data series found in response.');
+      throw new Error('Invalid or empty NASA POWER data response');
     }
 
     const rawText = await response.text();

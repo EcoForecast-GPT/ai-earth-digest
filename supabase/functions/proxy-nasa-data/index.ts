@@ -21,23 +21,48 @@ serve(async (req) => {
       });
     }
 
-    const nasaUrl = `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=NLDAS_FORA0125_H_002:Tair_f_inst&location=GEOM:POINT(${lon},%20${lat})&startDate=${startDate}T00:00:00&endDate=${endDate}T23:59:59&type=asc2`;
-
-    const response = await fetch(nasaUrl);
+    // Use POWER API instead as it doesn't require auth
+    const nasaUrl = `https://power.larc.nasa.gov/api/temporal/hourly/point?parameters=T2M,PRECTOT,RH2M,WS2M&community=RE&longitude=${lon}&latitude=${lat}&start=${startDate}&end=${endDate}&format=JSON`;
+    
+    const response = await fetch(nasaUrl, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
 
     if (!response.ok) {
-      // Do not fabricate data. If NASA returns 404 or any other error, forward an error.
-      const errText = `NASA API failed with status: ${response.status}`;
-      return new Response(JSON.stringify({ error: errText }), {
+      // Log error details for debugging
+      const errText = await response.text();
+      console.error('NASA POWER API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errText
+      });
+      
+      return new Response(JSON.stringify({ 
+        error: `NASA API failed with status: ${response.status}`,
+        details: errText
+      }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const data = await response.text();
+    const data = await response.json();
+    
+    // Basic validation of POWER API response
+    if (!data.properties || !data.properties.parameter) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid NASA POWER API response format',
+        details: 'Missing required data structure'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(data, {
-      headers: { ...corsHeaders, "Content-Type": "text/plain" },
+    return new Response(JSON.stringify(data), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error) {
