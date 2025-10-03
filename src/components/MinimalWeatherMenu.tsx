@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Cloud, CloudRain, CloudSnow, Sun, Wind, CloudDrizzle } from 'lucide-react';
-import type { WeatherLocation } from '@/pages/Index';
+import { WeatherLocation } from '@/pages/Index';
 
 interface MinimalWeatherMenuProps {
   location: WeatherLocation;
-  temperature?: number;
+  temperature?: number; // made optional to avoid defaulting to 20
   condition: string;
   isLoading: boolean;
-  onLocationChange?: (loc: WeatherLocation) => void;
 }
 
 const getWeatherIcon = (condition: string) => {
@@ -40,42 +39,8 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
   location,
   temperature,
   condition,
-  isLoading,
-  onLocationChange
+  isLoading
 }) => {
-  const [countries, setCountries] = useState<{name: string, code: string}[]>([]);
-  const [cities, setCities] = useState<{name: string, country: string, lat: number, lon: number}[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState<string>("");
-  const [selectedCity, setSelectedCity] = useState<string>("");
-
-  useEffect(() => {
-    fetch('/countries.json').then(r => r.json()).then(setCountries);
-    fetch('/cities.json').then(r => r.json()).then(setCities);
-  }, []);
-
-  useEffect(() => {
-    // Set initial country/city from location
-    if (location && location.name) {
-      const [city, country] = location.name.split(',').map(s => s.trim());
-      setSelectedCity(city);
-      setSelectedCountry(country);
-    }
-  }, [location]);
-
-  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCountry(e.target.value);
-    setSelectedCity("");
-  };
-  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCity(e.target.value);
-    const cityObj = cities.find(c => c.name === e.target.value && c.country === selectedCountry);
-    if (cityObj && onLocationChange) {
-      onLocationChange({ lat: cityObj.lat, lon: cityObj.lon, name: `${cityObj.name}, ${cityObj.country}` });
-    }
-  };
-
-  const filteredCities = cities.filter(c => c.country === selectedCountry);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -99,7 +64,7 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
       >
         {getWeatherIcon(condition)}
       </motion.div>
-
+      
       <div className="flex-1">
         <motion.div 
           className="text-3xl font-bold text-foreground"
@@ -118,18 +83,12 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
           {condition}
         </motion.div>
       </div>
-
-      <div className="text-right min-w-[180px]">
-        <div className="text-xs text-muted-foreground">Country</div>
-        <select className="w-full mb-1" value={selectedCountry} onChange={handleCountryChange}>
-          <option value="">Select country</option>
-          {countries.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
-        </select>
-        <div className="text-xs text-muted-foreground">City</div>
-        <select className="w-full" value={selectedCity} onChange={handleCityChange}>
-          <option value="">Select city</option>
-          {filteredCities.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-        </select>
+      
+      <div className="text-right">
+        <div className="text-xs text-muted-foreground">Location</div>
+        <div className="text-sm font-medium text-foreground truncate max-w-[150px]">
+          {location.name.split(',')[0]}
+        </div>
       </div>
     </motion.div>
   );

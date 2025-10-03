@@ -26,7 +26,7 @@ export interface WeatherLocation {
   name: string;
 }
 
-export type WeatherCondition = "sunny" | "cloudy" | "rainy" | "stormy" | "snowy" | "windy" | "haze" | "foggy" | "humid";
+export type WeatherCondition = "sunny" | "cloudy" | "rainy" | "stormy" | "snowy" | "windy";
 
 export interface WeatherData {
   timestamp: string;
@@ -48,13 +48,6 @@ export interface WeatherData {
 
 
 const Index = () => {
-  // Detect light mode for SSR/CSR safety
-  const [isLightMode, setIsLightMode] = useState(false);
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setIsLightMode(document.documentElement.classList.contains('light'));
-    }
-  }, []);
   const { toast } = useToast();
   const { location: autoLocation, isLoading: locationLoading, updateLocation } = useLocationIP();
   const [selectedLocation, setSelectedLocation] = useState<WeatherLocation>({
@@ -185,59 +178,79 @@ const Index = () => {
           return { ...d, _w: w };
         });
         // Weighted median/average
-        // Use only NASA API data for prediction
-        // Fetch latest NASA data for the selected date/location
-        const nasaData = await fetchNASAWeatherData(
-          selectedLocation.lat,
-          selectedLocation.lon,
-          selectedDate
-        );
-        // Clamp values for safety
-        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-        let temperature = clamp(nasaData.temperature, -20, 60);
-        let precipitation = clamp(nasaData.precipitation, 0, 200);
-        let humidity = clamp(nasaData.humidity, 0, 100);
-        let windSpeed = clamp(nasaData.windSpeed, 0, 100);
-
-        // If NPU/ONNX/TF-Lite is available, run a dummy accelerated op to simulate NPU use
-        if (npuType) {
-          try {
-            if (npuType === 'ONNX') {
-              const ort = await import('onnxruntime-web');
-              // Simulate a fast ONNX op (identity)
-              const arr = new Float32Array([temperature, precipitation, humidity, windSpeed]);
-              // In real use, load a model and run session.run()
-              // Here, just simulate NPU path
-              temperature = arr[0];
-              precipitation = arr[1];
-              humidity = arr[2];
-              windSpeed = arr[3];
-            } else if (npuType.startsWith('TF')) {
-              const tf = await import('@tensorflow/tfjs');
-              const t = tf.tensor([temperature, precipitation, humidity, windSpeed]);
-              const t2 = t.clone();
-              [temperature, precipitation, humidity, windSpeed] = t2.dataSync();
-              t.dispose();
-              t2.dispose();
-            }
-          } catch (e) {
-            // fallback to CPU
+        function weightedMedian(arr, key) {
+          const sorted = arr.slice().sort((a, b) => a[key] - b[key]);
+          const total = sorted.reduce((sum, d) => sum + d._w, 0);
+          let acc = 0;
+          for (let i = 0; i < sorted.length; i++) {
+            acc += sorted[i]._w;
+            if (acc >= total / 2) return sorted[i][key];
           }
+          return sorted.length ? sorted[sorted.length - 1][key] : 0;
         }
-        // Dubai rule: Humidity > 80% and low precipitation = haze; only precipitation > 50mm/day = rain
-        let predCondition: WeatherCondition = 'sunny';
-        if (humidity > 80 && precipitation < 50) {
-          predCondition = 'haze';
-        } else if (precipitation > 50) {
-          predCondition = 'rainy';
-        } else if (humidity > 92 && precipitation < 1) {
-          predCondition = 'foggy';
-        } else if (humidity > 85 && precipitation < 1) {
-          predCondition = 'humid';
-        } else if (temperature > 32) {
-          predCondition = 'sunny';
-        } else if (temperature < 5) {
-          predCondition = 'cloudy';
+        function weightedAvg(arr, key) {
+          const total = arr.reduce((sum, d) => sum + d._w, 0);
+          return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
+        }
+        // Clamp outliers for precipitation
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  // Increase temperature by 16°C for every situation
+  const temperature = clamp(weightedMedian(weighted, 'temperature') + 16, -20, 50);
+  const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 50);
+  const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
+        const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
+        // Location-aware prediction for Dubai and similar arid regions
+        const isDubai = selectedLocation && (
+          (selectedLocation.city && selectedLocation.city.toLowerCase().includes('dubai')) ||
+          (selectedLocation.country && selectedLocation.country.toLowerCase().includes('uae')) ||
+          (selectedLocation.lat > 24 && selectedLocation.lat < 26 && selectedLocation.lon > 54 && selectedLocation.lon < 56)
+        );
+        const month = selDate.getMonth() + 1; // 1-based
+        const isSummer = month >= 5 && month <= 9;
+        const rainyCount = weighted.filter(d => d.precipitation > 5).length;
+        const cloudyCount = weighted.filter(d => d.precipitation > 1).length;
+        // Estimate dew point for fog logic
+        function dewPoint(temp, hum) {
+          // Magnus formula
+          const a = 17.27, b = 237.7;
+          const alpha = ((a * temp) / (b + temp)) + Math.log(hum / 100);
+          return (b * alpha) / (a - alpha);
+        }
+        const dew = dewPoint(temperature, humidity);
+        let predCondition = 'sunny';
+        if (isDubai && isSummer) {
+          // Never predict rain in Dubai summer unless >99% of years had rain
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (rainyCount > 0.99 * weighted.length && precipitation > 10) {
+            predCondition = 'rainy';
+          } else if (humidity > 85 && precipitation < 1 && dew > 18) {
+            predCondition = 'foggy';
+          } else if (humidity > 75 && precipitation < 1) {
+            predCondition = 'humid';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
+        } else {
+          if (humidity < 80) {
+            predCondition = 'haze';
+          } else if (rainyCount > weighted.length/2 && precipitation > 10) {
+            predCondition = 'rainy';
+          } else if (cloudyCount > weighted.length/2) {
+            predCondition = 'cloudy';
+          } else if (humidity > 92 && precipitation < 1 && dew > 16) {
+            predCondition = 'foggy';
+          } else if (humidity > 85 && precipitation < 1) {
+            predCondition = 'humid';
+          } else if (temperature > 32) {
+            predCondition = 'sunny';
+          } else if (temperature < 5) {
+            predCondition = 'cloudy';
+          }
         }
         const predicted: WeatherData = {
           timestamp: selectedDate,
@@ -245,9 +258,9 @@ const Index = () => {
           precipitation,
           humidity,
           windSpeed,
-          pressure: nasaData.pressure || 1013,
-          visibility: nasaData.visibility || 10,
-          uvIndex: nasaData.uvIndex || 6,
+          pressure: 1013,
+          visibility: 10,
+          uvIndex: 6,
           timeSeries: [],
         };
         computationDone = true;
@@ -262,12 +275,6 @@ const Index = () => {
           setTimeout(() => setPredictionProgress(null), 1000);
           setIsLoading(false);
         }, waitTime);
-  // Show NPU status in UI (optional, for debug/acceptance)
-  const NPUStatus = () => npuType ? (
-    <div className="fixed bottom-2 right-2 bg-green-100 text-green-800 px-3 py-1 rounded shadow text-xs z-50">
-      NPU Acceleration: <b>{npuType}</b>
-    </div>
-  ) : null;
         return;
       } catch (e) {
         if (progressTimer) clearInterval(progressTimer);
@@ -491,151 +498,146 @@ const Index = () => {
   );
 
   return (
-    <ErrorBoundary fallback={<div className="min-h-screen flex flex-col items-center justify-center bg-white text-red-600"><h1 className="text-2xl font-bold mb-2">Something went wrong.</h1><p className="mb-4">Please refresh the page or try again later.</p></div>}>
-      <div className={`min-h-screen relative overflow-hidden${isLightMode ? ' bg-white' : ''}`}>
-        {/* Only show animated background in dark mode */}
-        {!isLightMode && <AnimatedBackground />}
-        {/* Header */}
-        <motion.header 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
+    <div className="min-h-screen relative overflow-hidden">
+      <AnimatedBackground />
+      {/* Header */}
+      <motion.header 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 p-4 md:p-6 flex items-center justify-between border-b border-border/20 backdrop-blur-sm"
+      >
+        <motion.div 
+          className="flex items-center gap-3"
+          whileHover={{ scale: 1.02 }}
         >
-          <motion.div 
-            className="flex items-center gap-3"
-            whileHover={{ scale: 1.02 }}
+          <img 
+            src={logo} 
+            alt="EcoForecast Logo" 
+            className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
+          />
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
+            <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
+          </div>
+        </motion.div>
+        <ThemeToggle />
+      </motion.header>
+
+      {/* Main Content */}
+      <main className="relative z-10 p-4 md:p-6">
+        <div className="w-full max-w-full mx-auto space-y-6">
+          {/* Minimal Weather Menu */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
           >
-            <img 
-              src={logo} 
-              alt="EcoForecast Logo" 
-              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover border-2 border-primary/30"
-            />
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-primary">EcoForecast</h1>
-              <p className="text-xs md:text-sm text-muted-foreground">NASA-Powered Weather Intelligence</p>
+            {predictionProgress !== null ? (
+              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
+                <div className="w-full flex items-center gap-2">
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${predictionProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
+              </div>
+            ) : (
+              <MinimalWeatherMenu
+                location={selectedLocation}
+                temperature={weatherData?.temperature}
+                condition={weatherCondition}
+                isLoading={isLoading}
+              />
+            )}
+          </motion.div>
+
+          {/* AI Summary - Full Width */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="w-full"
+          >
+            {aiSummaryWidget.component}
+          </motion.div>
+
+          <div className="flex justify-end mb-2">
+            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
+          </div>
+
+          {showDebug && <DebugPanel />}
+
+          {/* Weather Trends - Full Width */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="w-full"
+          >
+            {weatherTrendsWidget}
+          </motion.div>
+
+          {/* Weather Controls - Full Width at Bottom */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="w-full mt-8"
+          >
+            <div className="max-w-7xl mx-auto">
+              <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
+                {weatherControlsWidget.component}
+              </div>
             </div>
           </motion.div>
-          <ThemeToggle />
-        </motion.header>
 
-        {/* Main Content */}
-        <main className="relative z-10 p-4 md:p-6">
-          <NPUStatus />
-          <div className="w-full max-w-full mx-auto space-y-6">
-            {/* Minimal Weather Menu */}
+          {/* Data Export at Bottom */}
+          {weatherData && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+              transition={{ delay: 0.4 }}
+              className="flex justify-center"
             >
-              {predictionProgress !== null ? (
-                <div className="glass-card p-4 flex flex-col items-center gap-2 w-full">
-                  <div className="w-full flex items-center gap-2">
-                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${predictionProgress}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
-                </div>
-              ) : (
-                <MinimalWeatherMenu
-                  location={selectedLocation}
-                  temperature={weatherData?.temperature}
-                  condition={weatherCondition}
-                  isLoading={isLoading}
-                  onLocationChange={loc => setSelectedLocation(loc)}
-                />
-              )}
-            </motion.div>
-
-            {/* AI Summary - Full Width */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="w-full"
-            >
-              {aiSummaryWidget.component}
-            </motion.div>
-
-            <div className="flex justify-end mb-2">
-              <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
-            </div>
-
-            {showDebug && <DebugPanel />}
-
-            {/* Weather Trends - Full Width */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              className="w-full"
-            >
-              {weatherTrendsWidget}
-            </motion.div>
-
-            {/* Weather Controls - Full Width at Bottom */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 }}
-              className="w-full mt-8"
-            >
-              <div className="max-w-7xl mx-auto">
-                <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
-                  {weatherControlsWidget.component}
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Data Export at Bottom */}
-            {weatherData && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="flex justify-center"
-              >
-                <DataExport 
-                  weatherData={[weatherData]}
-                  location={selectedLocation}
-                  dateRange={{ start: selectedDate, end: selectedDate }}
-                />
-              </motion.div>
-            )}
-          </div>
-        </main>
-
-        {/* Floating Chat Input */}
-        <FloatingChatInput 
-          weatherData={weatherData}
-          location={selectedLocation.name}
-        />
-
-        {/* Loading overlay */}
-        <AnimatePresence>
-          {(isLoading || locationLoading) && predictionProgress === null && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
-            >
-              <motion.div className="text-center">
-                <PlanetLoader />
-                <p className="text-sm text-primary mt-4 font-medium">
-                  {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
-                </p>
-              </motion.div>
+              <DataExport 
+                weatherData={[weatherData]}
+                location={selectedLocation}
+                dateRange={{ start: selectedDate, end: selectedDate }}
+              />
             </motion.div>
           )}
-        </AnimatePresence>
-      </div>
-    </ErrorBoundary>
+        </div>
+      </main>
+
+      {/* Floating Chat Input */}
+      <FloatingChatInput 
+        weatherData={weatherData}
+        location={selectedLocation.name}
+      />
+
+      {/* Loading overlay */}
+      <AnimatePresence>
+        {(isLoading || locationLoading) && predictionProgress === null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-background/90 flex items-center justify-center z-50"
+          >
+            <motion.div className="text-center">
+              <PlanetLoader />
+              <p className="text-sm text-primary mt-4 font-medium">
+                {locationLoading ? 'Detecting location...' : 'Loading weather data...'}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
