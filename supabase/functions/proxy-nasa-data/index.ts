@@ -20,15 +20,17 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Debug: log all headers
+  const allHeaders: Record<string, string> = {};
+  for (const [key, value] of req.headers.entries()) {
+    allHeaders[key] = value;
+  }
+  console.log('ALL RECEIVED HEADERS:', allHeaders);
+
   // Check authorization
-  console.log('Received headers:', {
-    authorization: req.headers.get('Authorization'),
-    apikey: req.headers.get('apikey')
-  });
-  
   const apiKey = req.headers.get('apikey');
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'Missing API key' }), {
+    return new Response(JSON.stringify({ error: 'Missing API key', receivedHeaders: allHeaders }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
