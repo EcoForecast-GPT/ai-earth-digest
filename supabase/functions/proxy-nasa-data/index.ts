@@ -124,9 +124,18 @@ serve(async (req: Request) => {
         status: resp.status,
         statusText: resp.statusText
       });
-      return new Response(JSON.stringify({ 
+      // Always return a valid structure for the frontend
+      return new Response(JSON.stringify({
         error: `NASA API failed with status: ${resp.status}`,
-        details: await resp.text()
+        details: await resp.text(),
+        properties: {
+          parameter: {
+            T2M: {},
+            PRECTOT: {},
+            RH2M: {},
+            WS2M: {}
+          }
+        }
       }), {
         status: resp.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -135,6 +144,23 @@ serve(async (req: Request) => {
 
     const weatherData = await resp.json();
     
+    // If missing required structure, return valid empty structure
+    if (!weatherData.properties || !weatherData.properties.parameter) {
+      return new Response(JSON.stringify({
+        error: 'Missing required parameters in NASA POWER API response',
+        properties: {
+          parameter: {
+            T2M: {},
+            PRECTOT: {},
+            RH2M: {},
+            WS2M: {}
+          }
+        }
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
     // Return the weather data
     return new Response(JSON.stringify(weatherData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
