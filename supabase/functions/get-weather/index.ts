@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 interface Request {
   method: string;
   url: string;
@@ -64,8 +70,9 @@ serve(async (req: Request) => {
       const dateString = requestedDate.toISOString().split('T')[0] || currentDate;
       // For all date types (past, today, future) prefer NASA time-series via proxy
       // Build proxy URL to fetch time-series for the day
-      // When calling between Edge Functions, we need to use the internal URL format
-      const proxyUrl = `http://localhost:54321/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
+      // Call the proxy-nasa-data function directly through the Edge Runtime
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const proxyUrl = `${supabaseUrl}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
       
       // Extract the apikey from the incoming request and use it for both headers
       const apikey = req.headers.get('apikey') || '';
