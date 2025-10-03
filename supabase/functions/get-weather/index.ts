@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+interface Request {
+  method: string;
+  url: string;
+  headers: Headers;
+  json(): Promise<any>;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -27,7 +34,7 @@ const codeToCondition = (code: number): WeatherData['condition'] => {
   return 'sunny';
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -55,8 +62,18 @@ serve(async (req) => {
       // For all date types (past, today, future) prefer NASA time-series via proxy
       // Build proxy URL to fetch time-series for the day
       const proxyUrl = `https://${new URL(req.url).host}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
-      // We'll fetch the proxy and parse its JSON or plain text output below
-      const proxyResp = await fetch(proxyUrl);
+      
+      // Extract the authorization header from the incoming request
+      const auth = req.headers.get('Authorization') || '';
+      const apikey = req.headers.get('apikey') || '';
+      
+      // We'll fetch the proxy and pass through the auth headers
+      const proxyResp = await fetch(proxyUrl, {
+        headers: {
+          'Authorization': auth,
+          'apikey': apikey
+        }
+      });
       if (!proxyResp.ok) throw new Error(`NASA proxy error: ${proxyResp.status}`);
 
       // If proxy returned JSON (fallback), parse series; otherwise parse plain text
