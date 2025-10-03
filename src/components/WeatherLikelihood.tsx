@@ -36,52 +36,52 @@ const WeatherLikelihood: React.FC<WeatherLikelihoodProps> = ({
 
     const conditions: LikelihoodCondition[] = [];
 
-    // Very Hot
-    const hotProbability = Math.min(100, Math.max(0, (avgTemp - 25) * 4 + Math.sqrt(tempVariance) * 2));
+    // Very Hot (wider range)
+    const hotProbability = Math.min(100, Math.max(0, (avgTemp - 20) * 5 + Math.sqrt(tempVariance) * 2));
     conditions.push({
       label: 'Very Hot',
-      probability: hotProbability,
+      probability: Math.round(hotProbability),
       severity: hotProbability > 70 ? 'extreme' : hotProbability > 50 ? 'high' : hotProbability > 25 ? 'medium' : 'low',
       icon: Thermometer,
-      description: `High temperatures expected (>${Math.round(avgTemp + 5)}°C)`
+      description: `High temperatures expected (>${Math.round(avgTemp + 7)}°C)`
     });
 
-    // Very Cold
-    const coldProbability = Math.min(100, Math.max(0, (10 - avgTemp) * 5 + Math.sqrt(tempVariance) * 2));
+    // Very Cold (wider range)
+    const coldProbability = Math.min(100, Math.max(0, (15 - avgTemp) * 5 + Math.sqrt(tempVariance) * 2));
     conditions.push({
       label: 'Very Cold',
-      probability: coldProbability,
+      probability: Math.round(coldProbability),
       severity: coldProbability > 70 ? 'extreme' : coldProbability > 50 ? 'high' : coldProbability > 25 ? 'medium' : 'low',
       icon: Thermometer,
-      description: `Freezing temperatures possible (<${Math.round(avgTemp - 5)}°C)`
+      description: `Freezing temperatures possible (<${Math.round(avgTemp - 7)}°C)`
     });
 
-    // Very Windy
-    const windyProbability = Math.min(100, Math.max(0, (avgWind - 8) * 6 + Math.sqrt(windVariance) * 3));
+    // Very Windy (wider range)
+    const windyProbability = Math.min(100, Math.max(0, (avgWind - 5) * 8 + Math.sqrt(windVariance) * 3));
     conditions.push({
       label: 'Very Windy',
-      probability: windyProbability,
+      probability: Math.round(windyProbability),
       severity: windyProbability > 70 ? 'extreme' : windyProbability > 50 ? 'high' : windyProbability > 25 ? 'medium' : 'low',
       icon: Wind,
-      description: `Strong winds expected (>${Math.round(avgWind + 5)} m/s)`
+      description: `Strong winds expected (>${Math.round(avgWind + 8)} m/s)`
     });
 
-    // Very Wet
-    const wetProbability = Math.min(100, Math.max(0, avgPrecip * 2 + avgHumidity * 0.5 - 20));
+    // Very Wet (wider range)
+    const wetProbability = Math.min(100, Math.max(0, avgPrecip * 2.5 + avgHumidity * 0.7 - 15));
     conditions.push({
       label: 'Very Wet',
-      probability: wetProbability,
+      probability: Math.round(wetProbability),
       severity: wetProbability > 70 ? 'extreme' : wetProbability > 50 ? 'high' : wetProbability > 25 ? 'medium' : 'low',
       icon: CloudRain,
-      description: `Heavy precipitation likely (>${Math.round(avgPrecip + 10)}mm)`
+      description: `Heavy precipitation likely (>${Math.round(avgPrecip + 15)}mm)`
     });
 
-    // Very Uncomfortable (heat index)
-    const discomfortIndex = (avgTemp - 20) * 2 + (avgHumidity - 60) * 0.5 + avgWind * 0.3;
-    const uncomfortableProbability = Math.min(100, Math.max(0, discomfortIndex * 2));
+    // Very Uncomfortable (heat index, wider range)
+    const discomfortIndex = (avgTemp - 18) * 2.5 + (avgHumidity - 55) * 0.7 + avgWind * 0.4;
+    const uncomfortableProbability = Math.min(100, Math.max(0, discomfortIndex * 2.2));
     conditions.push({
       label: 'Very Uncomfortable',
-      probability: uncomfortableProbability,
+      probability: Math.round(uncomfortableProbability),
       severity: uncomfortableProbability > 70 ? 'extreme' : uncomfortableProbability > 50 ? 'high' : uncomfortableProbability > 25 ? 'medium' : 'low',
       icon: AlertTriangle,
       description: 'Poor conditions for outdoor activities'

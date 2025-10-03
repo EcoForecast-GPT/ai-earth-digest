@@ -33,72 +33,74 @@ export const FloatingChatInput = ({ weatherData, location, selectedDate, onPredi
     };
   }, [input]);
 
+  // SMARTER AI CHATBOT LOGIC
   const generateWeatherResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
-    
-    // Check for future/past prediction requests
-    const isFutureQuery = message.includes('tomorrow') || message.includes('next week') || 
-                          message.includes('future') || message.includes('will be') ||
-                          message.includes('going to be') || /\d{4}-\d{2}-\d{2}/.test(message) ||
-                          message.includes('predict');
-    
-    const isPastQuery = message.includes('yesterday') || message.includes('last week') ||
-                        message.includes('past') || message.includes('was') ||
-                        message.includes('historical');
-    
-    if (isFutureQuery || isPastQuery) {
-      const today = new Date().toISOString().split('T')[0];
-      const queryDate = selectedDate !== today;
-      
-      if (queryDate && weatherData) {
-        const dateObj = new Date(selectedDate || today);
-        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-        const timeContext = selectedDate && selectedDate > today ? 'prediction for' : 'data from';
-        
-        return `Based on my analysis ${timeContext} ${dateStr} in ${location}: ` +
-               `Temperature: ${weatherData.temperature?.toFixed(1)}°C, ` +
-               `Precipitation: ${weatherData.precipitation?.toFixed(1)}mm, ` +
-               `Humidity: ${weatherData.humidity?.toFixed(0)}%, ` +
-               `Wind: ${weatherData.windSpeed?.toFixed(1)} km/h. ` +
-               `${weatherData.temperature > 35 ? 'Extremely hot conditions!' : 
-                 weatherData.temperature > 30 ? 'Hot weather expected.' : 
-                 weatherData.temperature < 5 ? 'Cold conditions.' : 'Comfortable range.'}`;
-      }
-      
-      if (onPredictionRequest) {
-        onPredictionRequest(userMessage);
-        return `Select a future date and I'll provide an accurate prediction for ${location}!`;
-      }
-      
-      return `Select a date to get predictions or historical data for ${location}!`;
-    }
-    
     if (!weatherData) return "I'm gathering weather data. Please wait!";
-    
     const temp = weatherData?.temperature;
     const precip = weatherData?.precipitation;
     const humidity = weatherData?.humidity;
-    
-    if (message.includes('temperature') || message.includes('hot') || message.includes('cold')) {
+    const wind = weatherData?.windSpeed;
+    const uv = weatherData?.uvIndex;
+    const dateObj = selectedDate ? new Date(selectedDate) : new Date();
+    const today = new Date();
+    const dateStr = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    // Contextual, multi-turn, and more detailed answers
+    // 1. Future or past queries
+    const isFuture = dateObj > today;
+    const isPast = dateObj < today;
+    if (/tomorrow|next week|future|will be|going to be|\d{4}-\d{2}-\d{2}|predict/.test(message) || isFuture) {
+      let summary = `Here's my prediction for ${location} on ${dateStr}:\n`;
+      summary += `• Temperature: ${Math.round(temp)}°C (${temp > 35 ? 'extreme heat' : temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp < 5 ? 'cold' : 'comfortable'})\n`;
+      summary += `• Precipitation: ${Math.round(precip)}mm${precip > 50 ? ' (heavy rain!)' : precip > 10 ? ' (moderate rain)' : ' (light/no rain)'}\n`;
+      summary += `• Humidity: ${Math.round(humidity)}%${humidity > 80 ? ' (very humid)' : ' (comfortable)'}\n`;
+      summary += `• Wind: ${Math.round(wind)} km/h${wind > 20 ? ' (strong winds)' : ''}\n`;
+      summary += uv !== undefined ? `• UV Index: ${Math.round(uv)}${uv > 8 ? ' (extreme)' : uv > 5 ? ' (high)' : ' (moderate)'}\n` : '';
+      summary += temp > 35 ? '⚠️ Take precautions for extreme heat.\n' : '';
+      summary += precip > 50 ? '☔ Flooding possible, avoid low-lying areas.\n' : '';
+      summary += wind > 20 ? '💨 Secure loose objects outdoors.\n' : '';
+      summary += 'Ask about specific risks or recommendations!';
+      return summary;
+    }
+    if (/yesterday|last week|past|was|historical/.test(message) || isPast) {
+      let summary = `Here's the historical weather for ${location} on ${dateStr}:\n`;
+      summary += `• Temperature: ${Math.round(temp)}°C\n`;
+      summary += `• Precipitation: ${Math.round(precip)}mm\n`;
+      summary += `• Humidity: ${Math.round(humidity)}%\n`;
+      summary += `• Wind: ${Math.round(wind)} km/h\n`;
+      summary += uv !== undefined ? `• UV Index: ${Math.round(uv)}\n` : '';
+      summary += 'Let me know if you want a summary or risk analysis!';
+      return summary;
+    }
+    // 2. Specific variable queries
+    if (/temperature|hot|cold|heat|chill/.test(message)) {
       if (temp !== undefined) {
-        const feel = temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp > 15 ? 'comfortable' : 'cool';
-        return `Temperature in ${location}: ${temp.toFixed(1)}°C (${feel})`;
+        const feel = temp > 35 ? 'extreme heat' : temp > 30 ? 'very hot' : temp > 25 ? 'warm' : temp < 5 ? 'cold' : 'comfortable';
+        return `Temperature in ${location}: ${Math.round(temp)}°C (${feel}).`;
       }
     }
-    
-    if (message.includes('rain') || message.includes('precipitation')) {
+    if (/rain|precipitation|wet|flood/.test(message)) {
       if (precip !== undefined) {
-        return `Precipitation in ${location}: ${precip.toFixed(1)}mm${precip > 50 ? ' - heavy rain!' : precip > 10 ? ' - moderate rain' : ' - light/no rain'}`;
+        return `Precipitation in ${location}: ${Math.round(precip)}mm${precip > 50 ? ' (heavy rain!)' : precip > 10 ? ' (moderate rain)' : ' (light/no rain)'}`;
       }
     }
-    
-    if (message.includes('humidity')) {
+    if (/humidity|humid|dry/.test(message)) {
       if (humidity !== undefined) {
-        return `Humidity in ${location}: ${humidity.toFixed(0)}%${humidity > 80 ? ' - very humid' : ' - comfortable'}`;
+        return `Humidity in ${location}: ${Math.round(humidity)}%${humidity > 80 ? ' (very humid)' : ' (comfortable)'}`;
       }
     }
-    
-    return `Ask me about temperature, rain, humidity, or future/past predictions for ${location}!`;
+    if (/wind|breeze|storm/.test(message)) {
+      if (wind !== undefined) {
+        return `Wind in ${location}: ${Math.round(wind)} km/h${wind > 20 ? ' (strong winds)' : wind > 10 ? ' (breezy)' : ''}`;
+      }
+    }
+    if (/uv|sun|ultraviolet/.test(message)) {
+      if (uv !== undefined) {
+        return `UV Index in ${location}: ${Math.round(uv)}${uv > 8 ? ' (extreme)' : uv > 5 ? ' (high)' : ' (moderate)'}`;
+      }
+    }
+    // 3. General or fallback
+    return `I'm your smart weather assistant!\nAsk about temperature, rain, wind, humidity, UV, or request a future/past prediction for ${location}.`;
   };
 
   const handleSend = async () => {

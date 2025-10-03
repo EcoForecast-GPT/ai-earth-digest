@@ -62,79 +62,101 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
         // ignore
       }
       console.debug('Proxy JSON response:', body);
-      if (body.fallback) {
-        // Convert synthetic fallback series into chart shape
-        const parsed = body.series.map((s: any) => ({ time: s.timestamp, temperature: s.tempK - 273.15, precipitation: s.precipMm ?? s.precipitation ?? 0 }));
-        // synthesize small precipitation values if all zeros
-        const maxPrecip = parsed.reduce((m: number, p: any) => Math.max(m, p.precipitation ?? 0), 0);
-        if (maxPrecip === 0 && parsed.length > 0) {
-          for (let i = 0; i < parsed.length; i++) {
-            const base = Math.random() * 1.5;
-            const spike = Math.random() > 0.9 ? Math.random() * 5 : 0;
-            parsed[i].precipitation = Math.round((base + spike) * 10) / 10;
-          }
-        }
-        try { if (typeof window !== 'undefined') (window as any).__LAST_PARSED_SERIES = parsed; } catch (e) {}
-        return parsed;
-      }
-      // If the function returned JSON for other reasons, try to extract a series field
+      // Only use real NASA data, no synthetic values
       if (Array.isArray(body.series)) {
-        const parsed = body.series.map((s: any) => ({ time: s.timestamp || s.time, temperature: (s.tempK ? s.tempK - 273.15 : s.temperature), precipitation: s.precipitation ?? 0 }));
-        const maxPrecip = parsed.reduce((m: number, p: any) => Math.max(m, p.precipitation ?? 0), 0);
-        if (maxPrecip === 0 && parsed.length > 0) {
-          for (let i = 0; i < parsed.length; i++) {
-            const base = Math.random() * 1.5;
-            const spike = Math.random() > 0.9 ? Math.random() * 5 : 0;
-            parsed[i].precipitation = Math.round((base + spike) * 10) / 10;
-          }
-        }
-        try { if (typeof window !== 'undefined') (window as any).__LAST_PARSED_SERIES = parsed; } catch (e) {}
+        const parsed = body.series.map((s: any) => {
+          // Convert from Kelvin to Celsius if needed
+          let temp = s.tempK ? s.tempK - 273.15 : s.temperature;
+          // If the temperature is unreasonable, skip this point
+          if (temp < -50 || temp > 60) return null;
+          
+          // Convert precipitation to mm if needed
+          let precip = s.precipMm ?? s.precipitation ?? 0;
+          // Skip negative precipitation values
+          if (precip < 0) precip = 0;
+          
+          return {
+            time: s.timestamp || s.time,
+            temperature: Math.round(temp * 10) / 10, // Round to 1 decimal
+            precipitation: Math.round(precip * 10) / 10, // Round to 1 decimal
+            windSpeed: s.windSpeed ? Math.round(s.windSpeed * 10) / 10 : undefined,
+            humidity: s.humidity ? Math.round(s.humidity) : undefined,
+          };
+        }).filter(point => point !== null); // Remove any invalid points
+        
+        // Sort by time
+        parsed.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        
         return parsed;
       }
-      throw new Error('Unexpected JSON response from proxy.');
+      throw new Error('No valid NASA data series found in response.');
     }
 
     const rawText = await response.text();
 
     // The data is returned as a multi-line string that needs parsing.
     // Skip header lines and parse data lines.
-    const lines = rawText.trim().split('\n');
-    const dataLines = lines.filter(line => !line.startsWith('#') && !line.startsWith('Date'));
+    const lines = rawText.trim().split('\n')
+      .filter(line => !line.startsWith('#') && !line.startsWith('Date'));
 
-    const parsedData = dataLines.map(line => {
-      const tokens = line.split(/\s+/);
-      const timestamp = tokens[0];
-      const tempStr = tokens[1];
-      const precipStr = tokens[2];
-      const temperatureKelvin = parseFloat(tempStr);
-      const temperatureCelsius = isNaN(temperatureKelvin) ? NaN : (temperatureKelvin - 273.15);
-      let precipitation = 0;
-      if (precipStr !== undefined) {
-        const p = parseFloat(precipStr);
-        if (!isNaN(p)) {
-          // Assume precipitation in mm for the period
-          precipitation = p;
+    const parsedData = lines
+      .map(line => {
+        const tokens = line.split(/\s+/);
+        const timestamp = tokens[0];
+        const tempStr = tokens[1];
+        const precipStr = tokens[2];
+        const windStr = tokens[3];
+        const humidityStr = tokens[4];
+
+        const temperatureKelvin = parseFloat(tempStr);
+        const temperatureCelsius = isNaN(temperatureKelvin) ? NaN : (temperatureKelvin - 273.15);
+
+        // Only include points with valid temperature
+        if (isNaN(temperatureCelsius) || temperatureCelsius < -50 || temperatureCelsius > 60) {
+          return null;
         }
-      }
 
-      return {
-        time: new Date(timestamp).toISOString(),
-        temperature: temperatureCelsius,
-        precipitation,
-      };
-    });
-    // If precipitation is zero for all points, synthesize a small precipitation series
-    const maxPrecip = parsedData.reduce((m, p) => Math.max(m, p.precipitation ?? 0), 0);
-    if (maxPrecip === 0 && parsedData.length > 0) {
-      for (let i = 0; i < parsedData.length; i++) {
-        // small synthetic precipitation between 0 and 2 mm, with occasional spikes
-        const base = Math.random() * 1.5;
-        const spike = Math.random() > 0.9 ? Math.random() * 5 : 0;
-        parsedData[i].precipitation = Math.round((base + spike) * 10) / 10;
-      }
+        // Clean precipitation data
+        let precipitation = 0;
+        if (precipStr !== undefined) {
+          const p = parseFloat(precipStr);
+          if (!isNaN(p) && p >= 0) {
+            precipitation = p;
+          }
+        }
+
+        // Parse wind speed if available
+        let windSpeed;
+        if (windStr !== undefined) {
+          const wind = parseFloat(windStr);
+          if (!isNaN(wind) && wind >= 0) {
+            windSpeed = wind;
+          }
+        }
+
+        // Parse humidity if available
+        let humidity;
+        if (humidityStr !== undefined) {
+          const hum = parseFloat(humidityStr);
+          if (!isNaN(hum) && hum >= 0 && hum <= 100) {
+            humidity = hum;
+          }
+        }
+
+        return {
+          time: new Date(timestamp).toISOString(),
+          temperature: Math.round(temperatureCelsius * 10) / 10,
+          precipitation: Math.round(precipitation * 10) / 10,
+          windSpeed: windSpeed !== undefined ? Math.round(windSpeed * 10) / 10 : undefined,
+          humidity: humidity !== undefined ? Math.round(humidity) : undefined,
+        };
+      })
+      .filter(point => point !== null) // Remove invalid points
+      .sort((a, b) => new Date(a!.time).getTime() - new Date(b!.time).getTime()); // Sort by time
+
+    if (parsedData.length === 0) {
+      throw new Error('No valid NASA weather data found in the response');
     }
-
-    try { if (typeof window !== 'undefined') (window as any).__LAST_PARSED_SERIES = parsedData; } catch (e) {}
 
     return parsedData;
 

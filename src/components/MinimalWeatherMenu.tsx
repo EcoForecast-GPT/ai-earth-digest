@@ -45,26 +45,11 @@ export const MinimalWeatherMenu: React.FC<MinimalWeatherMenuProps> = ({
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass-card p-4 flex items-center gap-4"
+      className="glass-card p-4 flex items-center gap-4 w-full max-w-full"
     >
-      <motion.div
-        animate={isLoading ? { 
-          rotate: [0, 360],
-          scale: [1, 1.1, 1]
-        } : {
-          y: [0, -5, 0],
-          rotate: 0
-        }}
-        transition={{ 
-          duration: isLoading ? 2 : 3,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {getWeatherIcon(condition)}
-      </motion.div>
-      
+      </div>
       <div className="flex-1">
         <motion.div 
           className="text-3xl font-bold text-foreground"
