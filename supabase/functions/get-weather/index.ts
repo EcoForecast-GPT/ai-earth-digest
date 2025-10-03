@@ -70,8 +70,9 @@ serve(async (req: Request) => {
       const dateString = requestedDate.toISOString().split('T')[0] || currentDate;
       // For all date types (past, today, future) prefer NASA time-series via proxy
       // Build proxy URL to fetch time-series for the day
-      // When calling between Edge Functions, we need to use the internal URL format
-      const proxyUrl = `http://localhost:54321/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
+      // When calling between Edge Functions in production, use the Supabase URL
+      const supabaseUrl = new URL(req.url).origin;
+      const proxyUrl = `${supabaseUrl}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
       
       // Create headers with apikey
       const apikey = req.headers.get('apikey') || '';
