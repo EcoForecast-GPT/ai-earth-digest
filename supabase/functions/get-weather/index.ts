@@ -70,22 +70,23 @@ serve(async (req: Request) => {
       const dateString = requestedDate.toISOString().split('T')[0] || currentDate;
       // For all date types (past, today, future) prefer NASA time-series via proxy
       // Build proxy URL to fetch time-series for the day
-      // Call the proxy-nasa-data function directly through the Edge Runtime
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-      const proxyUrl = `${supabaseUrl}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
+      // When calling between Edge Functions, we need to use the internal URL format
+      const proxyUrl = `http://localhost:54321/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
       
-      // Pass through all the original request headers
-      const headers = new Headers();
-      for (const [key, value] of req.headers.entries()) {
-        headers.set(key, value);
-      }
+      // Create headers with apikey
+      const apikey = req.headers.get('apikey') || '';
+      const headers = new Headers({
+        'Authorization': `Bearer ${apikey}`,
+        'apikey': apikey,
+        'Accept': 'application/json'
+      });
       
       console.log('Making proxy request:', {
         url: proxyUrl,
         headers: Object.fromEntries(headers.entries())
       });
       
-      // Make the request with all original headers
+      // Make the request with authorization headers
       const proxyResp = await fetch(proxyUrl, { headers });
       
       console.log('Proxy response:', {
@@ -93,7 +94,11 @@ serve(async (req: Request) => {
         statusText: proxyResp.statusText,
         headers: Object.fromEntries(proxyResp.headers.entries())
       });
-      if (!proxyResp.ok) throw new Error(`NASA proxy error: ${proxyResp.status}`);
+      if (!proxyResp.ok) {
+        const errText = await proxyResp.text();
+        console.error('Proxy error details:', errText);
+        throw new Error(`NASA proxy error: ${proxyResp.status} - ${errText}`);
+      }
 
       // If proxy returned JSON (fallback), parse series; otherwise parse plain text
       let series: any[] = [];
