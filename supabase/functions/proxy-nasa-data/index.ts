@@ -36,9 +36,9 @@ serve(async (req: Request) => {
     const endDateObj = new Date(endDate);
     const isFuture = startDateObj > now || endDateObj > now;
 
-    // Convert dates to NASA DISC API format (YYYYMMDD)
-    const nasaStartDate = startDate.replace(/-/g, '');
-    const nasaEndDate = endDate.replace(/-/g, '');
+    // Convert dates to Unix timestamps for NASA API
+    const startTimestamp = Math.floor(startDateObj.getTime() / 1000);
+    const endTimestamp = Math.floor(endDateObj.getTime() / 1000);
 
     if (isFuture) {
       // For future dates, return synthetic data based on climatology
@@ -82,12 +82,13 @@ serve(async (req: Request) => {
       });
     }
 
-    // For historical dates, use NASA DISC API
-    const nasaUrl = `https://disc.gsfc.nasa.gov/api/search/temporal/point?parameters=T2M,PRECTOT,RH2M,WS2M&longitude=${lon}&latitude=${lat}&start=${nasaStartDate}&end=${nasaEndDate}&format=JSON`;
+    // For historical dates, use NASA POWER API with timestamps
+    const nasaUrl = `https://power.larc.nasa.gov/api/temporal/hourly/point?parameters=T2M,PRECTOT,RH2M,WS2M&community=RE&longitude=${lon}&latitude=${lat}&start=${startTimestamp}&end=${endTimestamp}&format=JSON`;
+    
+    console.log('Calling NASA API:', nasaUrl);
     
     const response = await fetch(nasaUrl, {
       headers: {
-        'Authorization': `Bearer ${EARTHDATA_TOKEN}`,
         'Accept': 'application/json'
       }
     });
