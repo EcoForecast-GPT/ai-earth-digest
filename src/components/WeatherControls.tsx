@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { WeatherLocation } from "@/pages/Index";
-import { countries } from "@/lib/countries";
 import { MapPin, Calendar, Database, Loader2, Navigation, Globe } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
@@ -38,8 +37,6 @@ const WeatherControls = ({
   weatherData
 }: WeatherControlsProps) => {
   const [customLocation, setCustomLocation] = useState("");
-  const [selectedCity, setSelectedCity] = useState<string>("");
-  const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [localDate, setLocalDate] = useState(date);
   const { 
     location: detectedLocation, 
@@ -59,31 +56,6 @@ const WeatherControls = ({
   }, [date]);
 
   const handleCustomLocationSubmit = () => {
-  // Handle city selection
-  const handleCitySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const cityName = e.target.value;
-    setSelectedCity(cityName);
-    const city = presetLocations.find(c => c.name === cityName);
-    if (city) {
-      onLocationChange(city);
-    }
-    // Always trigger fetch for new city selection
-    if (cityName) {
-      onFetch();
-    }
-  };
-
-  // Handle country selection
-  const handleCountrySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const countryName = e.target.value;
-    setSelectedCountry(countryName);
-    const country = countries.find(c => c.name === countryName);
-    if (country) {
-      onLocationChange({ lat: country.lat, lon: country.lon, name: country.name });
-      // Always trigger fetch for new country selection
-      onFetch();
-    }
-  };
     const parts = customLocation.split(',').map(part => part.trim());
     
     if (parts.length === 2) {
@@ -114,40 +86,6 @@ const WeatherControls = ({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5 }}
     >
-      {/* City selection dropdown */}
-      <div className="mb-2">
-        <Label className="text-foreground flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-primary" />
-          Select City
-        </Label>
-        <select
-          className="glass-panel border-white/10 focus:border-accent/50 w-full mt-1"
-          value={selectedCity}
-          onChange={handleCitySelect}
-        >
-          <option value="">-- Choose a city --</option>
-          {presetLocations.map(city => (
-            <option key={city.name} value={city.name}>{city.name}</option>
-          ))}
-        </select>
-      </div>
-      {/* Country selection dropdown */}
-      <div className="mb-2">
-        <Label className="text-foreground flex items-center gap-2">
-          <Globe className="w-4 h-4 text-primary" />
-          Select Country
-        </Label>
-        <select
-          className="glass-panel border-white/10 focus:border-accent/50 w-full mt-1"
-          value={selectedCountry}
-          onChange={handleCountrySelect}
-        >
-          <option value="">-- Choose a country --</option>
-          {countries.map(country => (
-            <option key={country.name} value={country.name}>{country.name}</option>
-          ))}
-        </select>
-      </div>
       <motion.div 
         className="flex items-center gap-2 mb-4"
         initial={{ opacity: 0, y: -10 }}
@@ -174,7 +112,28 @@ const WeatherControls = ({
         </Label>
         
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          {/* ...existing code... */}
+          <Button
+            onClick={requestLocation}
+            disabled={locationLoading}
+            variant="outline"
+            className="w-full glass-panel hover:glow-primary transition-all duration-300 group"
+          >
+            {locationLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Detecting Location...
+              </>
+            ) : (
+              <>
+                <Navigation className="w-4 h-4 mr-2" />
+                Auto-Detect Location
+              </>
+            )}
+          </Button>
+        </motion.div>
+
+        {locationError && (
+          <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             className="text-sm text-destructive bg-destructive/10 p-2 rounded-lg"
