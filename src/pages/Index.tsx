@@ -16,6 +16,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
+import { predictWeatherFromSeries } from '@/lib/predictor';
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DebugPanel from "@/components/DebugPanel";
 import WeatherControls from "@/components/WeatherControls";
@@ -88,242 +89,58 @@ const Index = () => {
 
   const fetchWeatherData = useCallback(async () => {
     // Check if selectedDate is in the future (up to 3 years)
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const selDate = new Date(selectedDate);
-    selDate.setHours(0,0,0,0);
-    const msInDay = 24*60*60*1000;
-    const maxFuture = new Date(today.getTime() + 3*365*msInDay);
     if (selDate > today && selDate <= maxFuture) {
-      // Initialize progress state
-      setPredictionProgress(1); // Start at 1%
-      let currentProgress = 1;
-      let progressTimer: ReturnType<typeof setInterval> | null = null;
-      const computationStart = Date.now();
-      
-      // Constants for smooth progress animation
-      const minTime = 50000; // 50 seconds minimum
-      const maxTime = 52000; // 52 seconds maximum
-      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1));
-      const updateInterval = 50; // Update every 50ms for smooth animation
-      const progressSteps = 98; // We'll go from 1% to 99% in small increments
-      const progressIncrement = 98 / (duration / updateInterval); // How much to increment each step
-      
-      let didTimeout = false;
-      let partialData: any[] | null = null;
-      let computationDone = false;
-      let computationResult: any = null;
-      const startTime = Date.now();
-      const timeoutPromise = new Promise((resolve, reject) => {
-        setTimeout(() => {
-          didTimeout = true;
-          if (computationDone) {
-            resolve(computationResult);
-          } else if (partialData && partialData.length > 0) {
-            resolve(partialData);
-          } else {
-            reject(new Error('Prediction timed out.'));
-          }
-        }, duration);
-      });
-  // Fetch up to 10 years of data for maximum accuracy
-  const tenYearsAgo = new Date(selDate);
-  tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
-  const dataStart = tenYearsAgo.toISOString().split('T')[0];
-  const dataEnd = selDate.toISOString().split('T')[0];
-  let yearData = timeSeriesData;
-      try {
-        setIsLoading(false); // Don't show loading overlay for prediction
-        
-        // Start smooth progress animation
-        progressTimer = setInterval(() => {
-          if (currentProgress < 99) {
-            currentProgress += progressIncrement;
-            setPredictionProgress(Math.min(99, currentProgress));
-          }
-        }, updateInterval);
+      // Predict from already-fetched NASA historical series in `timeSeriesData`.
+      // This avoids any external fetches and uses only historical NASA points the app already has.
+      // Show a smooth 1% -> 100% progress bar (one-by-one increments) over a short duration so UX feels responsive.
+      const duration = 5000; // 5s for progress animation
+      const steps = 99; // 1..100
+      const intervalMs = Math.max(10, Math.round(duration / steps));
 
-        if (!yearData || yearData.length < 3000) {
-          // Fetch in background and update progress
-          const fetchPromise = fetchTimeSeriesData({
-            lat: selectedLocation.lat,
-            lon: selectedLocation.lon,
-            startDate: dataStart,
-            endDate: dataEnd,
-          });
-          // As data comes in, update partialData
-          fetchPromise.then(d => { partialData = d; });
-          yearData = await Promise.race([fetchPromise, timeoutPromise]);
-          setTimeSeriesData(yearData);
-          if (progressTimer) clearInterval(progressTimer);
-        }
-        // Predict using seasonal pattern: find the closest day-of-year in all years
-        const targetDay = selDate.getMonth() * 31 + selDate.getDate();
-        // Use a ±14-day window for more robust seasonality
-        const windowDays = 14;
-        const candidates = yearData.filter(d => {
-          const dDate = new Date(d.time);
-          const dDay = dDate.getMonth() * 31 + dDate.getDate();
-          return Math.abs(dDay - targetDay) <= windowDays;
-        });
-        // Weight recent years and similar years more
-        const yearNow = selDate.getFullYear();
-        const weighted = candidates.map(d => {
-          const dDate = new Date(d.time);
-          const yearDiff = Math.abs(dDate.getFullYear() - yearNow);
-          // Weight: recent years (less diff = more weight), similar temp/humidity (closer = more weight)
-          let w = 1 / (1 + yearDiff);
-          if (Math.abs(d.temperature - dDate.getMonth() > 4 && d.temperature > 30 ? 38 : 25) < 5) w *= 1.5;
-          if (Math.abs(d.humidity - 80) < 10) w *= 1.2;
-          return { ...d, _w: w };
-        });
-        // Weighted median/average
-        function weightedMedian(arr, key) {
-          const sorted = arr.slice().sort((a, b) => a[key] - b[key]);
-          const total = sorted.reduce((sum, d) => sum + d._w, 0);
-          let acc = 0;
-          for (let i = 0; i < sorted.length; i++) {
-            acc += sorted[i]._w;
-            if (acc >= total / 2) return sorted[i][key];
-          }
-          return sorted.length ? sorted[sorted.length - 1][key] : 0;
-        }
-        function weightedAvg(arr, key) {
-          const total = arr.reduce((sum, d) => sum + d._w, 0);
-          return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
-        }
-        
-        // Location-aware prediction for Dubai and similar arid regions
-        const isDubai = selectedLocation && (
-          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('dubai')) ||
-          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('uae')) ||
-          (selectedLocation.lat > 24 && selectedLocation.lat < 26 && selectedLocation.lon > 54 && selectedLocation.lon < 56)
-        );
-        const month = selDate.getMonth() + 1; // 1-based
-        const isSummer = month >= 5 && month <= 9;
-        
-        // Clamp outliers for precipitation
-        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-        
-        // Calculate temperature accurately for all locations
-        let tempBase = weightedMedian(weighted, 'temperature');
-        
-        // Season-based adjustment using sine wave (peaks in summer)
-        const seasonalFactor = Math.sin((month - 7) / 12 * Math.PI * 2) * 8;
-        
-        // Latitude-based: tropical regions (near equator) are hotter
-        // Closer to equator (lat near 0) = hotter, poles (lat near ±90) = colder
-        const tropicalBoost = (1 - Math.abs(selectedLocation.lat) / 90) * 12;
-        
-        // Dubai and arid tropical/subtropical regions
-        if (isDubai) {
-          // Dubai: temperatures based on historical averages
-          if (month >= 6 && month <= 8) {
-            tempBase = 38 + (Math.random() * 4); // Summer: 38-42°C
-          } else if (month === 9) {
-            tempBase = 36 + (Math.random() * 4); // September: 36-40°C
-          } else if (month === 5) {
-            tempBase = 35 + (Math.random() * 4); // May: 35-39°C
-          } else if (month === 10) {
-            tempBase = 32 + (Math.random() * 4); // October: 32-36°C
-          } else if (month === 4) {
-            tempBase = 31 + (Math.random() * 4); // April: 31-35°C
-          } else if (month >= 11 || month <= 3) {
-            tempBase = 24 + (Math.random() * 4); // Winter: 24-28°C
-          }
-        }
-        
-        const temperature = clamp(tempBase + seasonalFactor + tropicalBoost, -40, 55);
-        const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
-        const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
-        const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
-        const rainyCount = weighted.filter(d => d.precipitation > 5).length;
-        const cloudyCount = weighted.filter(d => d.precipitation > 1).length;
-        // Estimate dew point for fog logic
-        function dewPoint(temp, hum) {
-          // Magnus formula
-          const a = 17.27, b = 237.7;
-          const alpha = ((a * temp) / (b + temp)) + Math.log(hum / 100);
-          return (b * alpha) / (a - alpha);
-        }
-        const dew = dewPoint(temperature, humidity);
-        let predCondition = 'sunny';
-        
-        // NEW LOGIC: High humidity (>80%) + low precipitation = haze
-        // Only very high precipitation (>50mm/day) = rain
-        if (humidity > 80 && precipitation < 50) {
-          predCondition = 'haze';
-        } else if (precipitation >= 50) {
-          predCondition = 'rainy';
-        } else if (isDubai && isSummer) {
-          // Never predict rain in Dubai summer unless extreme precipitation
-          if (humidity < 80) {
-            predCondition = 'haze';
-          } else if (humidity > 85 && precipitation < 1 && dew > 18) {
-            predCondition = 'foggy';
-          } else if (cloudyCount > weighted.length/2) {
-            predCondition = 'cloudy';
-          } else if (temperature > 32) {
-            predCondition = 'sunny';
-          } else if (temperature < 5) {
-            predCondition = 'cloudy';
-          }
+      setPredictionProgress(1);
+      setIsLoading(false);
+
+      let progress = 1;
+      let progressTimer: ReturnType<typeof setInterval> | null = null;
+      progressTimer = setInterval(() => {
+        if (progress < 100) {
+          progress += 1;
+          setPredictionProgress(progress);
         } else {
-          if (humidity < 80) {
-            predCondition = 'haze';
-          } else if (cloudyCount > weighted.length/2) {
-            predCondition = 'cloudy';
-          } else if (humidity > 92 && precipitation < 1 && dew > 16) {
-            predCondition = 'foggy';
-          } else if (temperature > 32) {
-            predCondition = 'sunny';
-          } else if (temperature < 5) {
-            predCondition = 'cloudy';
-          }
+          if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
         }
+      }, intervalMs);
+
+      // Use predictor module (standalone, no network calls)
+      try {
+        const series = timeSeriesData || [];
+        const pred = predictWeatherFromSeries(series, selDate);
         const predicted: WeatherData = {
           timestamp: selectedDate,
-          temperature,
-          precipitation,
-          humidity,
-          windSpeed,
+          temperature: pred.temperature,
+          precipitation: pred.precipitation,
+          humidity: pred.humidity,
+          windSpeed: pred.windSpeed,
           pressure: 1013,
           visibility: 10,
-          uvIndex: 6,
+          uvIndex: 0,
           timeSeries: [],
         };
-        computationDone = true;
-        computationResult = yearData;
-        // Wait until at least 50s have elapsed before showing result
-        const elapsed = Date.now() - startTime;
-        const waitTime = Math.max(0, minTime - (Date.now() - computationStart));
-        setTimeout(() => {
-          // Smoothly complete the progress
-          if (progressTimer) {
-            clearInterval(progressTimer);
-            // Ensure we hit 100% smoothly
-            setPredictionProgress(100);
+
+        // When progress reaches 100, apply results. Poll until done.
+        const waiter = setInterval(() => {
+          if (predictionProgress !== null && predictionProgress >= 100) {
             setWeatherData(predicted);
-            setWeatherCondition(predCondition as WeatherCondition);
-            // Clear the progress after a brief pause
-            setTimeout(() => setPredictionProgress(null), 1000);
+            setWeatherCondition(predicted.precipitation > 2 ? 'rainy' : (predicted.humidity > 70 ? 'cloudy' : 'sunny'));
+            setTimeout(() => setPredictionProgress(null), 800);
+            clearInterval(waiter);
           }
-          setIsLoading(false);
-        }, waitTime);
-        return;
-      } catch (e) {
-        if (progressTimer) clearInterval(progressTimer);
+        }, Math.max(50, intervalMs));
+
+      } catch (err) {
+        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
         setPredictionProgress(null);
-        setWeatherData(null);
-        setWeatherCondition('sunny');
-        setIsLoading(false);
-        if (didTimeout) {
-          toast({
-            title: "Prediction Timeout",
-            description: "Prediction took too long. Try a shorter range or check your connection.",
-            variant: "destructive",
-          });
-        }
+        toast({ title: 'Prediction Error', description: (err instanceof Error) ? err.message : 'Prediction failed', variant: 'destructive' });
         return;
       }
     }
