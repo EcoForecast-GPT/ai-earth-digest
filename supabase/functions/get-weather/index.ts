@@ -98,25 +98,25 @@ serve(async (req: Request) => {
       // If proxy returned JSON (fallback), parse series; otherwise parse plain text
       let series: any[] = [];
       const ct = proxyResp.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        const body = await proxyResp.json();
-        if (Array.isArray(body.series)) series = body.series.map((s: any) => ({
-          time: s.timestamp || s.time,
-          temperature: s.tempK ? s.tempK - 273.15 : s.temperature,
-          precipitation: s.precipMm ?? s.precipitation ?? 0,
-          windSpeed: s.windSpeed,
-          humidity: s.humidity,
-        }));
-      } else {
-        const raw = await proxyResp.text();
-        const lines = raw.trim().split('\n').filter(l => !l.startsWith('#') && !l.toLowerCase().startsWith('date'));
-        for (const line of lines) {
-          const tokens = line.split(/\s+/);
-          const timestamp = tokens[0];
-          const tempK = parseFloat(tokens[1]);
-          const precip = parseFloat(tokens[2] || '0');
-          series.push({ time: new Date(timestamp).toISOString(), temperature: (isNaN(tempK) ? NaN : tempK - 273.15), precipitation: isNaN(precip) ? 0 : precip });
-        }
+      const body = await proxyResp.json();
+      if (body.properties && body.properties.parameter) {
+        // Convert hourly data to series
+        const hours = Object.keys(body.properties.parameter.T2M);
+        series = hours.map(hour => {
+          const date = new Date(
+            parseInt(hour.substring(0, 4)),
+            parseInt(hour.substring(4, 6)) - 1,
+            parseInt(hour.substring(6, 8)),
+            parseInt(hour.substring(8, 10))
+          );
+          return {
+            time: date.toISOString(),
+            temperature: body.properties.parameter.T2M[hour],
+            precipitation: body.properties.parameter.PRECTOTCORR?.[hour] ?? 0,
+            windSpeed: body.properties.parameter.WS2M[hour],
+            humidity: body.properties.parameter.RH2M[hour]
+          };
+        });
       }
 
       // Compute daily aggregates
