@@ -490,7 +490,7 @@ const Index = () => {
   };
 
 
-  // Full-width Weather Trends widget with date range controls
+  // Weather Trends widget with date range controls (rounded values, larger range)
   const weatherTrendsWidget = (
     <div className="w-full">
       <div className="flex flex-col md:flex-row md:items-end gap-2 mb-2 w-full">
@@ -521,7 +521,13 @@ const Index = () => {
         </div>
       </div>
       <TimeSeriesChart
-        data={timeSeriesData}
+        data={timeSeriesData.map(d => ({
+          ...d,
+          temperature: d.temperature !== undefined ? Math.round(d.temperature) : undefined,
+          precipitation: d.precipitation !== undefined ? Math.round(d.precipitation) : undefined,
+          humidity: d.humidity !== undefined ? Math.round(d.humidity) : undefined,
+          windSpeed: d.windSpeed !== undefined ? Math.round(d.windSpeed) : undefined,
+        }))}
         isLoading={isTimeSeriesLoading}
         error={timeSeriesError}
         selectedVars={['temperature', 'precipitation']}
@@ -529,6 +535,7 @@ const Index = () => {
     </div>
   );
 
+  // --- NEW LAYOUT ---
   return (
     <div className="min-h-screen relative overflow-hidden">
       <AnimatedBackground />
@@ -580,45 +587,19 @@ const Index = () => {
             ) : (
               <MinimalWeatherMenu
                 location={selectedLocation}
-                temperature={weatherData?.temperature}
+                temperature={weatherData?.temperature !== undefined ? Math.round(weatherData.temperature) : undefined}
                 condition={weatherCondition}
                 isLoading={isLoading}
               />
             )}
           </motion.div>
 
-          {/* AI Summary - Full Width */}
+          {/* Weather Controls - Full Width, directly after current weather */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.15 }}
             className="w-full"
-          >
-            {aiSummaryWidget.component}
-          </motion.div>
-
-          <div className="flex justify-end mb-2">
-            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
-          </div>
-
-          {showDebug && <DebugPanel />}
-
-          {/* Weather Trends - Full Width */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="w-full"
-          >
-            {weatherTrendsWidget}
-          </motion.div>
-
-          {/* Weather Controls - Full Width at Bottom */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
-            className="w-full mt-8"
           >
             <div className="max-w-7xl mx-auto">
               <div className="bg-card rounded-lg shadow-lg p-4 md:p-6 border border-border/30">
@@ -626,6 +607,32 @@ const Index = () => {
               </div>
             </div>
           </motion.div>
+
+          {/* Split screen: Weather Trends (left) and AI Weather Analysis (right) */}
+          <div className="flex flex-col md:flex-row gap-6 w-full">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex-1"
+            >
+              {weatherTrendsWidget}
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="flex-1"
+            >
+              {aiSummaryWidget.component}
+            </motion.div>
+          </div>
+
+          <div className="flex justify-end mb-2">
+            <button onClick={() => setShowDebug(s => !s)} className="text-xs text-muted-foreground">Toggle Debug Panel</button>
+          </div>
+
+          {showDebug && <DebugPanel />}
 
           {/* Data Export at Bottom */}
           {weatherData && (

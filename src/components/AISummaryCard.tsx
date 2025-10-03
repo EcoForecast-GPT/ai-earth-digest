@@ -28,32 +28,34 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
     // Simulate AI processing delay
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    const avgTemp = weatherData.reduce((sum, d) => sum + d.temperature, 0) / weatherData.length;
-    const avgPrecip = weatherData.reduce((sum, d) => sum + d.precipitation, 0) / weatherData.length;
-    const avgWind = weatherData.reduce((sum, d) => sum + d.windSpeed, 0) / weatherData.length;
-    const avgHumidity = weatherData.reduce((sum, d) => sum + d.humidity, 0) / weatherData.length;
-    const avgUV = weatherData.reduce((sum, d) => sum + (d.uvIndex || 0), 0) / weatherData.length;
+  const avgTemp = Math.round(weatherData.reduce((sum, d) => sum + d.temperature, 0) / weatherData.length);
+  const avgPrecip = Math.round(weatherData.reduce((sum, d) => sum + d.precipitation, 0) / weatherData.length);
+  const avgWind = Math.round(weatherData.reduce((sum, d) => sum + d.windSpeed, 0) / weatherData.length);
+  const avgHumidity = Math.round(weatherData.reduce((sum, d) => sum + d.humidity, 0) / weatherData.length);
+  const avgUV = Math.round(weatherData.reduce((sum, d) => sum + (d.uvIndex || 0), 0) / weatherData.length);
     
     // More accurate condition assessment
-    let weatherDesc = 'moderate';
-    if (avgTemp > 30) weatherDesc = 'very hot';
-    else if (avgTemp > 25) weatherDesc = 'warm';
-    else if (avgTemp < 5) weatherDesc = 'very cold';
-    else if (avgTemp < 15) weatherDesc = 'cool';
+  let weatherDesc = 'moderate';
+  if (avgTemp > 35) weatherDesc = 'extremely hot';
+  else if (avgTemp > 30) weatherDesc = 'very hot';
+  else if (avgTemp > 25) weatherDesc = 'warm';
+  else if (avgTemp < 5) weatherDesc = 'very cold';
+  else if (avgTemp < 15) weatherDesc = 'cool';
     
-    let precipDesc = 'dry conditions';
-    if (avgPrecip > 20) precipDesc = 'heavy rainfall';
-    else if (avgPrecip > 10) precipDesc = 'moderate rain';
-    else if (avgPrecip > 2) precipDesc = 'light showers';
+  let precipDesc = 'dry conditions';
+  if (avgPrecip > 50) precipDesc = 'extreme rainfall';
+  else if (avgPrecip > 20) precipDesc = 'heavy rainfall';
+  else if (avgPrecip > 10) precipDesc = 'moderate rain';
+  else if (avgPrecip > 2) precipDesc = 'light showers';
     
     const newSummary: AISummary = {
       overview: `NASA satellite data analysis for ${location.name} reveals ${weatherDesc} conditions with ${precipDesc}. Based on ${weatherData.length} data points, the current weather pattern indicates ${avgHumidity > 80 ? 'high atmospheric moisture' : avgHumidity < 40 ? 'dry air' : 'balanced humidity levels'}.`,
       insights: [
-        `Temperature: ${avgTemp.toFixed(1)}°C - ${avgTemp > 30 ? 'Heat stress risk' : avgTemp < 0 ? 'Freezing conditions' : 'Comfortable range'}`,
-        `Wind Speed: ${avgWind.toFixed(1)} m/s - ${avgWind > 20 ? 'Dangerous winds' : avgWind > 10 ? 'Strong breeze' : 'Light winds'}`,
-        `Precipitation: ${avgPrecip.toFixed(1)} mm - ${avgPrecip > 10 ? 'Flood risk' : avgPrecip > 2 ? 'Wet conditions' : 'Minimal rainfall'}`,
-        `Humidity: ${avgHumidity.toFixed(0)}% - ${avgHumidity > 85 ? 'Very humid, discomfort likely' : avgHumidity < 30 ? 'Very dry, hydration critical' : 'Comfortable levels'}`,
-        `UV Index: ${avgUV.toFixed(1)} - ${avgUV > 8 ? 'Extreme UV, protection essential' : avgUV > 5 ? 'High UV, use sunscreen' : 'Moderate UV levels'}`
+        `Temperature: ${avgTemp}°C - ${avgTemp > 35 ? 'Extreme heat risk' : avgTemp > 30 ? 'Heat stress risk' : avgTemp < 0 ? 'Freezing conditions' : 'Comfortable range'}`,
+        `Wind Speed: ${avgWind} m/s - ${avgWind > 20 ? 'Dangerous winds' : avgWind > 10 ? 'Strong breeze' : 'Light winds'}`,
+        `Precipitation: ${avgPrecip} mm - ${avgPrecip > 50 ? 'Extreme flood risk' : avgPrecip > 10 ? 'Flood risk' : avgPrecip > 2 ? 'Wet conditions' : 'Minimal rainfall'}`,
+        `Humidity: ${avgHumidity}% - ${avgHumidity > 85 ? 'Very humid, discomfort likely' : avgHumidity < 30 ? 'Very dry, hydration critical' : 'Comfortable levels'}`,
+        `UV Index: ${avgUV} - ${avgUV > 8 ? 'Extreme UV, protection essential' : avgUV > 5 ? 'High UV, use sunscreen' : 'Moderate UV levels'}`
       ],
       recommendations: [
         avgTemp > 35 ? "⚠️ Extreme heat: Limit outdoor exposure, stay hydrated, seek air conditioning" : 
@@ -62,6 +64,7 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
         avgTemp < 10 ? "🧥 Wear warm layers and protect extremities" : 
         "✅ Pleasant temperature for outdoor activities",
         
+        avgPrecip > 50 ? "🚨 Extreme rain: Flooding likely, avoid travel" :
         avgPrecip > 15 ? "☔ Heavy rain warning: Avoid flood-prone areas, delay travel if possible" :
         avgPrecip > 5 ? "🌧️ Rain gear essential, plan indoor alternatives" : 
         avgPrecip > 1 ? "🌦️ Light rain possible, carry an umbrella" :
@@ -111,7 +114,7 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
           <div className="text-center space-y-4">
             <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-muted-foreground animate-pulse-glow">
-              Gemini AI analyzing weather patterns...
+              AI analyzing weather patterns...
             </p>
           </div>
         </div>
@@ -172,7 +175,7 @@ const AISummaryCard = ({ location, weatherData, isLoading }: AISummaryCardProps)
       <div className="mt-4 pt-4 border-t border-border/50">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse-glow" />
-          Powered by Gemini AI
+          Powered by AI
         </div>
       </div>
     </div>
