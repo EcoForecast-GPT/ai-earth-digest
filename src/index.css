@@ -76,12 +76,12 @@
   }
 
   .light {
-    /* Light Theme - Yellow/Orange Accent */
-    --background: 40 40% 98%;
+    /* Light Theme - Pure White Background */
+    --background: 0 0% 100%;
     --foreground: 0 0% 10%;
-    --card: 40 30% 96%;
+    --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
-    --popover: 40 35% 97%;
+    --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
     --primary: 30 95% 45%;
     --primary-foreground: 0 0% 98%;
@@ -104,7 +104,7 @@
     
     /* Light gradients */
     --gradient-aurora: linear-gradient(135deg, hsl(30 95% 45% / 0.1), hsl(45 95% 50% / 0.1));
-    --gradient-space: linear-gradient(180deg, hsl(40 40% 98%), hsl(40 30% 96%));
+    --gradient-space: linear-gradient(180deg, hsl(0 0% 100%), hsl(0 0% 100%));
     --gradient-glass: linear-gradient(135deg, hsl(35 30% 85% / 0.2), hsl(30 95% 45% / 0.08));
     
     /* Light shadows */

@@ -192,20 +192,36 @@ const Index = () => {
           const total = arr.reduce((sum, d) => sum + d._w, 0);
           return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
         }
-        // Clamp outliers for precipitation
-        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-        const temperature = clamp(weightedMedian(weighted, 'temperature'), -20, 50);
-        const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 50);
-        const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
-        const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
+        
         // Location-aware prediction for Dubai and similar arid regions
         const isDubai = selectedLocation && (
-          (selectedLocation.city && selectedLocation.city.toLowerCase().includes('dubai')) ||
-          (selectedLocation.country && selectedLocation.country.toLowerCase().includes('uae')) ||
+          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('dubai')) ||
+          (selectedLocation.name && selectedLocation.name.toLowerCase().includes('uae')) ||
           (selectedLocation.lat > 24 && selectedLocation.lat < 26 && selectedLocation.lon > 54 && selectedLocation.lon < 56)
         );
         const month = selDate.getMonth() + 1; // 1-based
         const isSummer = month >= 5 && month <= 9;
+        
+        // Clamp outliers for precipitation
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        
+        // Calculate temperature with more variance and location awareness
+        let tempBase = weightedMedian(weighted, 'temperature');
+        
+        // Add seasonal and location-based adjustments
+        const seasonalFactor = Math.sin((month - 1) / 12 * Math.PI * 2) * 5;
+        const latitudeFactor = Math.abs(selectedLocation.lat) / 90 * 10;
+        
+        // Adjust for Dubai-specific conditions
+        if (isDubai && isSummer) {
+          tempBase = Math.max(tempBase, 35); // Dubai summer minimum
+          tempBase += Math.random() * 5; // Add variance
+        }
+        
+        const temperature = clamp(tempBase + seasonalFactor - latitudeFactor, -20, 50);
+        const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
+        const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
+        const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
         const rainyCount = weighted.filter(d => d.precipitation > 5).length;
         const cloudyCount = weighted.filter(d => d.precipitation > 1).length;
         // Estimate dew point for fog logic
@@ -217,16 +233,19 @@ const Index = () => {
         }
         const dew = dewPoint(temperature, humidity);
         let predCondition = 'sunny';
-        if (isDubai && isSummer) {
-          // Never predict rain in Dubai summer unless >99% of years had rain
+        
+        // NEW LOGIC: High humidity (>80%) + low precipitation = haze
+        // Only very high precipitation (>50mm/day) = rain
+        if (humidity > 80 && precipitation < 50) {
+          predCondition = 'haze';
+        } else if (precipitation >= 50) {
+          predCondition = 'rainy';
+        } else if (isDubai && isSummer) {
+          // Never predict rain in Dubai summer unless extreme precipitation
           if (humidity < 80) {
             predCondition = 'haze';
-          } else if (rainyCount > 0.99 * weighted.length && precipitation > 10) {
-            predCondition = 'rainy';
           } else if (humidity > 85 && precipitation < 1 && dew > 18) {
             predCondition = 'foggy';
-          } else if (humidity > 75 && precipitation < 1) {
-            predCondition = 'humid';
           } else if (cloudyCount > weighted.length/2) {
             predCondition = 'cloudy';
           } else if (temperature > 32) {
@@ -237,14 +256,10 @@ const Index = () => {
         } else {
           if (humidity < 80) {
             predCondition = 'haze';
-          } else if (rainyCount > weighted.length/2 && precipitation > 10) {
-            predCondition = 'rainy';
           } else if (cloudyCount > weighted.length/2) {
             predCondition = 'cloudy';
           } else if (humidity > 92 && precipitation < 1 && dew > 16) {
             predCondition = 'foggy';
-          } else if (humidity > 85 && precipitation < 1) {
-            predCondition = 'humid';
           } else if (temperature > 32) {
             predCondition = 'sunny';
           } else if (temperature < 5) {
@@ -314,17 +329,27 @@ const Index = () => {
 
       setWeatherData(data);
 
-      // Set weather condition from NASA data
-      const conditionMap: { [key: string]: WeatherCondition } = {
-        'very sunny': 'sunny',
-        'sunny': 'sunny',
-        'partly cloudy': 'cloudy',
-        'cloudy': 'cloudy',
-        'very cloudy': 'cloudy',
-        'rainy': 'rainy',
-        'stormy': 'stormy'
-      };
-      setWeatherCondition(conditionMap[nasaData.condition] || 'sunny');
+      // Set weather condition from NASA data with improved logic
+      // High humidity (>80%) + low precipitation = haze
+      // Only very high precipitation (>50mm/day) = rain
+      let condition: WeatherCondition = 'sunny';
+      if (nasaData.humidity > 80 && nasaData.precipitation < 50) {
+        condition = 'cloudy'; // haze represented as cloudy
+      } else if (nasaData.precipitation >= 50) {
+        condition = 'rainy';
+      } else {
+        const conditionMap: { [key: string]: WeatherCondition } = {
+          'very sunny': 'sunny',
+          'sunny': 'sunny',
+          'partly cloudy': 'cloudy',
+          'cloudy': 'cloudy',
+          'very cloudy': 'cloudy',
+          'rainy': 'rainy',
+          'stormy': 'stormy'
+        };
+        condition = conditionMap[nasaData.condition] || 'sunny';
+      }
+      setWeatherCondition(condition);
 
     } catch (error) {
       toast({
