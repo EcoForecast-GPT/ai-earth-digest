@@ -521,13 +521,33 @@ const Index = () => {
         </div>
       </div>
       <TimeSeriesChart
-        data={timeSeriesData.map(d => ({
-          ...d,
-          temperature: d.temperature !== undefined ? Math.round(d.temperature) : undefined,
-          precipitation: d.precipitation !== undefined ? Math.round(d.precipitation) : undefined,
-          humidity: d.humidity !== undefined ? Math.round(d.humidity) : undefined,
-          windSpeed: d.windSpeed !== undefined ? Math.round(d.windSpeed) : undefined,
-        }))}
+        data={(() => {
+          // Always show the current weather as the latest point in the chart
+          const roundedSeries = timeSeriesData.map(d => ({
+            ...d,
+            temperature: d.temperature !== undefined ? Math.round(d.temperature) : undefined,
+            precipitation: d.precipitation !== undefined ? Math.round(d.precipitation) : undefined,
+            humidity: d.humidity !== undefined ? Math.round(d.humidity) : undefined,
+            windSpeed: d.windSpeed !== undefined ? Math.round(d.windSpeed) : undefined,
+          }));
+          if (weatherData && selectedDate) {
+            // Remove any existing point for the selectedDate
+            const filtered = roundedSeries.filter(d => {
+              const t = d.time?.split('T')[0];
+              return t !== selectedDate;
+            });
+            // Add the current weather as the latest point
+            filtered.push({
+              time: selectedDate,
+              temperature: Math.round(weatherData.temperature),
+              precipitation: Math.round(weatherData.precipitation),
+              humidity: Math.round(weatherData.humidity),
+              windSpeed: Math.round(weatherData.windSpeed),
+            });
+            return filtered;
+          }
+          return roundedSeries;
+        })()}
         isLoading={isTimeSeriesLoading}
         error={timeSeriesError}
         selectedVars={['temperature', 'precipitation']}
