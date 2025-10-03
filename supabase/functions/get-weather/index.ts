@@ -49,6 +49,9 @@ serve(async (req: Request) => {
       );
     }
 
+    // Default to today's date if not provided
+    const currentDate = new Date().toISOString().split('T')[0];
+
     console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
 
     let openMeteoUrl;
@@ -58,7 +61,7 @@ serve(async (req: Request) => {
 
     if (requestedDate) {
       requestedDate.setHours(0,0,0,0);
-      const dateString = requestedDate.toISOString().split('T')[0];
+      const dateString = requestedDate.toISOString().split('T')[0] || currentDate;
       // For all date types (past, today, future) prefer NASA time-series via proxy
       // Build proxy URL to fetch time-series for the day
       const proxyUrl = `https://${new URL(req.url).host}/functions/v1/proxy-nasa-data?lat=${lat}&lon=${lon}&startDate=${dateString}&endDate=${dateString}`;
@@ -66,12 +69,26 @@ serve(async (req: Request) => {
       // Extract the apikey from the incoming request and use it for both headers
       const apikey = req.headers.get('apikey') || '';
       
+      console.log('Making proxy request:', {
+        url: proxyUrl,
+        headers: {
+          Authorization: `Bearer ${apikey}`,
+          apikey: apikey
+        }
+      });
+      
       // We'll fetch the proxy using apikey for both headers (this is how Supabase Edge Functions expect it)
       const proxyResp = await fetch(proxyUrl, {
         headers: {
           'Authorization': `Bearer ${apikey}`,
           'apikey': apikey
         }
+      });
+      
+      console.log('Proxy response:', {
+        status: proxyResp.status,
+        statusText: proxyResp.statusText,
+        headers: Object.fromEntries(proxyResp.headers.entries())
       });
       if (!proxyResp.ok) throw new Error(`NASA proxy error: ${proxyResp.status}`);
 
