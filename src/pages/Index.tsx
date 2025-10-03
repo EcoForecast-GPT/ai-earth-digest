@@ -17,8 +17,6 @@ import { MinimalWeatherMenu } from "@/components/MinimalWeatherMenu";
 import { fetchNASAWeatherData } from "@/services/nasaWeatherService";
 import { fetchTimeSeriesData } from "@/services/nasaEarthdataService";
 import { predictWeatherFromSeries } from '@/lib/predictor';
-import { ProgressTimer } from '@/components/ProgressTimer';
-import { config } from '@/lib/config';
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DebugPanel from "@/components/DebugPanel";
 import WeatherControls from "@/components/WeatherControls";
@@ -88,18 +86,30 @@ const Index = () => {
   };
 
   // Fetch single-point weather data
-  const fetchWeatherData = useCallback(async () => {
-    const today = new Date();
-    const maxFuture = new Date();
-    maxFuture.setFullYear(maxFuture.getFullYear() + 3);
-    const selDate = new Date(selectedDate);
 
+  const fetchWeatherData = useCallback(async () => {
     // Check if selectedDate is in the future (up to 3 years)
     if (selDate > today && selDate <= maxFuture) {
+      // Predict from already-fetched NASA historical series in `timeSeriesData`.
+      // This avoids any external fetches and uses only historical NASA points the app already has.
+      // Show a smooth 1% -> 100% progress bar (one-by-one increments) over a short duration so UX feels responsive.
+      const duration = 5000; // 5s for progress animation
+      const steps = 99; // 1..100
+      const intervalMs = Math.max(10, Math.round(duration / steps));
 
-      // Start prediction timer immediately
-      setPredictionProgress(0);
+      setPredictionProgress(1);
       setIsLoading(false);
+
+      let progress = 1;
+      let progressTimer: ReturnType<typeof setInterval> | null = null;
+      progressTimer = setInterval(() => {
+        if (progress < 100) {
+          progress += 1;
+          setPredictionProgress(progress);
+        } else {
+          if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+        }
+      }, intervalMs);
 
       // Use predictor module (standalone, no network calls)
       try {
@@ -117,12 +127,15 @@ const Index = () => {
           timeSeries: [],
         };
 
-        // Set up timer for showing results
-        setTimeout(() => {
-          setWeatherData(predicted);
-          setWeatherCondition(predicted.precipitation > 2 ? 'rainy' : (predicted.humidity > 70 ? 'cloudy' : 'sunny'));
-          setTimeout(() => setPredictionProgress(null), 500);
-        }, config.PREDICTION_TIMER_MS);
+        // When progress reaches 100, apply results. Poll until done.
+        const waiter = setInterval(() => {
+          if (predictionProgress !== null && predictionProgress >= 100) {
+            setWeatherData(predicted);
+            setWeatherCondition(predicted.precipitation > 2 ? 'rainy' : (predicted.humidity > 70 ? 'cloudy' : 'sunny'));
+            setTimeout(() => setPredictionProgress(null), 800);
+            clearInterval(waiter);
+          }
+        }, Math.max(50, intervalMs));
 
       } catch (err) {
         if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
@@ -410,12 +423,17 @@ const Index = () => {
             className="w-full max-w-full"
           >
             {predictionProgress !== null ? (
-              <div className="glass-card p-4 w-full max-w-full">
-                <ProgressTimer 
-                  duration={config.PREDICTION_TIMER_MS} 
-                  isActive={predictionProgress !== null} 
-                  label={weatherData ? 'Ready!' : 'Computing future weather prediction...'}
-                />
+              <div className="glass-card p-4 flex flex-col items-center gap-2 w-full max-w-full">
+                <div className="w-full flex items-center gap-2">
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${predictionProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground" style={{ minWidth: 40 }}>{Math.round(predictionProgress)}%</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Predicting future weather...</div>
               </div>
             ) : (
               <MinimalWeatherMenu

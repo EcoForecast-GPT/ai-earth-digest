@@ -2,7 +2,6 @@
  * @file This service is responsible for fetching data from NASA's Earthdata services,
  * such as Data Rods for time-series data and GIBS for map imagery.
  */
-import { config } from '@/lib/config';
 
 const NASA_API_KEY = 'XjsdXPro2vh4bNJe9sv2PWNGGSBcv72Z74HDnsJG'; // Public key
 const EARTHDATA_TOKEN = 'eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOiJFYXJ0aGRhdGEgTG9naW4iLCJzaWciOiJlZGxqd3RwdWJrZXlfb3BzIiwiYWxnIjoiUlMyNTYifQ.eyJ0eXBlIjoiVXNlciIsInVpZCI6InNocmVzdGgwOTAxIiwiZXhwIjoxNzY0NTY3MTE4LCJpYXQiOjE3NTkzODMxMTgsImlzcyI6Imh0dHBzOi8vdXJzLmVhcnRoZGF0YS5uYXNhLmdvdiIsImlkZW50aXR5X3Byb3ZpZGVyIjoiZWRsX29wcyIsImFjciI6ImVkbCIsImFzc3VyYW5jZV9sZXZlbCI6M30.1DtnKV8tU2kCNy-hlKImBIurffJl7uOe48H732nHDIV5uZJWeA4NI05o0fb0g9ux5ikc5nNFHaAPq5PFn-NPdEA2ErCzZBPGXmycYqiz3cuv9cGY5JevObzzpoJt5Nr4eVAqCVMDarI1KIWFcvvYs57bQEMTMU9bTbQxOAehN4sT-cQwWNY-vq1Qvfpk67K1wWz6KdN4TQ_1M0ZY4O8kzYTAJir6yrIVj4H_OYCMOLZhMkpyZyv_p961oNtC8WeeE1pPyehzkSF9eZMHCelYs689fCYxnJTjYPPIM9F2lhUNesm5E5_cddinnz1QcoHv6B8eUEJJwvkQehGBVLwrww';
@@ -62,58 +61,35 @@ export const fetchTimeSeriesData = async (params: TimeSeriesParams) => {
       } catch (e) {
         // ignore
       }
-      if (config.DEBUG) {
-        console.debug('NASA POWER API response:', body);
-      }
-      
-      if (body.properties?.parameter) {
-        const params = body.properties.parameter;
-        if (!params.T2M || !params.PRECTOT || !params.RH2M || !params.WS2M) {
-          throw new Error('Missing required parameters in NASA POWER API response');
-        }
-        
-        const timestamps = Object.keys(params.T2M);
-        if (timestamps.length === 0) {
-          throw new Error('No data points found in NASA POWER API response');
-        }
-        
-        const parsed = timestamps.map(timestamp => {
-          // T2M is in Celsius, no conversion needed
-          const temp = params.T2M[timestamp];
-          if (temp === -999 || temp < -50 || temp > 60) return null;
+      console.debug('Proxy JSON response:', body);
+      // Only use real NASA data, no synthetic values
+      if (Array.isArray(body.series)) {
+        const parsed = body.series.map((s: any) => {
+          // Convert from Kelvin to Celsius if needed
+          let temp = s.tempK ? s.tempK - 273.15 : s.temperature;
+          // If the temperature is unreasonable, skip this point
+          if (temp < -50 || temp > 60) return null;
           
-          // PRECTOT is in mm/hour
-          const precip = params.PRECTOT[timestamp];
-          if (precip === -999 || precip < 0) return null;
-          
-          // RH2M is relative humidity (%)
-          const humidity = params.RH2M[timestamp];
-          if (humidity === -999 || humidity < 0 || humidity > 100) return null;
-          
-          // WS2M is wind speed at 2 meters (m/s)
-          const windSpeed = params.WS2M[timestamp];
-          if (windSpeed === -999 || windSpeed < 0) return null;
-          
-          const isoTime = new Date(`${timestamp.split(':')[0]}Z`).toISOString();
+          // Convert precipitation to mm if needed
+          let precip = s.precipMm ?? s.precipitation ?? 0;
+          // Skip negative precipitation values
+          if (precip < 0) precip = 0;
           
           return {
-            time: isoTime,
-            temperature: Math.round(temp * 10) / 10,
-            precipitation: Math.round(precip * 10) / 10,
-            windSpeed: Math.round(windSpeed * 10) / 10,
-            humidity: Math.round(humidity)
+            time: s.timestamp || s.time,
+            temperature: Math.round(temp * 10) / 10, // Round to 1 decimal
+            precipitation: Math.round(precip * 10) / 10, // Round to 1 decimal
+            windSpeed: s.windSpeed ? Math.round(s.windSpeed * 10) / 10 : undefined,
+            humidity: s.humidity ? Math.round(s.humidity) : undefined,
           };
-        }).filter(point => point !== null);
-
-        // Sort by time
-        parsed.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        }).filter(point => point !== null); // Remove any invalid points
         
         // Sort by time
         parsed.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
         
         return parsed;
       }
-      throw new Error('Invalid or empty NASA POWER data response');
+      throw new Error('No valid NASA data series found in response.');
     }
 
     const rawText = await response.text();

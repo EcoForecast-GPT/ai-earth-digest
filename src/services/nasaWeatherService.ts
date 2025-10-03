@@ -2,10 +2,6 @@
 // summary computed from NASA time-series points for the requested date and location.
 import { fetchTimeSeriesData } from '@/services/nasaEarthdataService';
 
-// Convert Kelvin to Celsius and track raw values for debugging
-export const kelvinToCelsius = (k: number) => k - 273.15;
-export const DEBUG = import.meta.env.VITE_DEBUG === 'true' || import.meta.env.NEXT_PUBLIC_DEBUG === 'true';
-
 export interface NASAWeatherData {
   temperature: number;
   precipitation: number;
@@ -15,11 +11,6 @@ export interface NASAWeatherData {
   visibility: number;
   uvIndex: number;
   condition: 'very sunny' | 'sunny' | 'partly cloudy' | 'cloudy' | 'very cloudy' | 'rainy' | 'stormy';
-  _debug?: {
-    rawTemperature?: number;
-    rawTimestamps?: string[];
-    rawTemperatures?: number[];
-  };
 }
 
 export const fetchNASAWeatherData = async (
@@ -54,18 +45,9 @@ export const fetchNASAWeatherData = async (
     const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
     const sum = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) : 0;
 
-    // Convert from Kelvin to Celsius BEFORE averaging to preserve precision
-    const tempsCelsius = temps.map(kelvinToCelsius);
-    const temperature = Math.round(avg(tempsCelsius) * 10) / 10;
-    const precipitation = Math.round(sum(precs) * 10) / 10;
-    const humidity = Math.round(avg(hums));
-
-    // Include debug information when enabled
-    const debugInfo = DEBUG ? {
-      rawTemperature: avg(temps),
-      rawTimestamps: series.map((p: any) => p.time),
-      rawTemperatures: temps,
-    } : undefined;
+    const temperature = Math.round((avg(temps)) * 10) / 10;
+    const precipitation = Math.round((sum(precs)) * 10) / 10;
+    const humidity = Math.round((avg(hums)));
     const windSpeed = Math.round((avg(winds)) * 10) / 10;
 
     // Conservative defaults for fields not reliably present in time-series
@@ -80,7 +62,7 @@ export const fetchNASAWeatherData = async (
     else if (humidity > 85) condition = 'very cloudy';
     else if (humidity > 70) condition = 'cloudy';
 
-    const result: NASAWeatherData = {
+    return {
       temperature,
       precipitation,
       humidity,
@@ -89,18 +71,7 @@ export const fetchNASAWeatherData = async (
       visibility,
       uvIndex,
       condition,
-      ...(DEBUG && { _debug: debugInfo })
     };
-
-    // Log raw data in debug mode
-    if (DEBUG) {
-      console.log('NASA Weather Data:', {
-        rawPayload: series,
-        processedData: result
-      });
-    }
-
-    return result;
   } catch (error) {
     console.error('Error fetching NASA weather data (time-series):', error);
     throw error instanceof Error ? error : new Error('Unknown weather fetch error');
