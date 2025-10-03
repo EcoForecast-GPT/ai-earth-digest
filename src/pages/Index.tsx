@@ -1,29 +1,3 @@
-// NPU/ONNX/DirectML/TF-Lite detection utility
-const detectNPU = async (): Promise<string | null> => {
-  // Try ONNX Runtime Web (DirectML/WebGL)
-  try {
-    // Dynamically import to avoid breaking SSR
-    const ort = await import('onnxruntime-web');
-    if (ort && ort.env && (ort.env.wasm.numThreads > 0 || ort.env.webgl.enabled || ort.env.directml.enabled)) {
-      return 'ONNX';
-    }
-  } catch {}
-  // Try TF.js with WebNN or WASM/CPU fallback
-  try {
-    const tf = await import('@tensorflow/tfjs');
-    if (tf && tf.engine && tf.engine().backendName) {
-      if (tf.engine().backendName.includes('webnn')) return 'TF-WebNN';
-      if (tf.engine().backendName.includes('webgl')) return 'TF-WebGL';
-      if (tf.engine().backendName.includes('wasm')) return 'TF-WASM';
-    }
-  } catch {}
-  return null;
-};
-  // NPU state
-  const [npuType, setNpuType] = useState<string | null>(null);
-  useEffect(() => {
-    detectNPU().then(setNpuType);
-  }, []);
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from "@/assets/logo.jpg";
