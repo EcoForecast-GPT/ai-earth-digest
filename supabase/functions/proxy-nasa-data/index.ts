@@ -146,8 +146,10 @@ serve(async (req: Request) => {
     
     // If missing required structure, return valid empty structure
     if (!weatherData.properties || !weatherData.properties.parameter) {
+      console.error('NASA API returned unexpected structure:', JSON.stringify(weatherData, null, 2));
       return new Response(JSON.stringify({
         error: 'Missing required parameters in NASA POWER API response',
+        nasaRaw: weatherData,
         properties: {
           parameter: {
             T2M: {},
