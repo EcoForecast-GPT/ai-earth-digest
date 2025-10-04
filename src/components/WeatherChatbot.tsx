@@ -48,46 +48,71 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   const generateWeatherResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
     
-    // Check for future/past prediction requests
-    const isFutureQuery = message.includes('tomorrow') || message.includes('next week') || 
-                          message.includes('future') || message.includes('will be') ||
-                          message.includes('going to be') || /\d{4}-\d{2}-\d{2}/.test(message) ||
-                          message.includes('predict');
+    // Enhanced future/past prediction detection
+    const isFutureQuery = message.includes('tomorrow') || message.includes('next') || 
+                          message.includes('future') || message.includes('will') ||
+                          message.includes('going to') || /\d{4}-\d{2}-\d{2}/.test(message) ||
+                          message.includes('predict') || message.includes('forecast') ||
+                          message.includes('upcoming') || message.includes('ahead');
     
-    const isPastQuery = message.includes('yesterday') || message.includes('last week') ||
+    const isPastQuery = message.includes('yesterday') || message.includes('last') ||
                         message.includes('past') || message.includes('was') ||
-                        message.includes('historical');
+                        message.includes('historical') || message.includes('previous') ||
+                        message.includes('ago');
     
+    // Always respond intelligently to prediction queries with NASA data
     if (isFutureQuery || isPastQuery) {
-      // Check if we have data for a non-current date
-      const today = new Date().toISOString().split('T')[0];
-      const queryDate = selectedDate !== today;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       
-      if (queryDate && weatherData) {
-        const dateObj = new Date(selectedDate || today);
-        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-        const timeContext = selectedDate && selectedDate > today ? 'prediction for' : 'data from';
+      if (selectedDate && weatherData) {
+        const queryDateObj = new Date(selectedDate);
+        queryDateObj.setHours(0, 0, 0, 0);
+        const isFuture = queryDateObj > today;
+        const isPast = queryDateObj < today;
         
-        return `Based on my analysis ${timeContext} ${dateStr}${location ? ` in ${location}` : ''}: ` +
-               `Temperature: ${weatherData.temperature?.toFixed(1)}°C, ` +
-               `Precipitation: ${weatherData.precipitation?.toFixed(1)}mm, ` +
-               `Humidity: ${weatherData.humidity?.toFixed(0)}%, ` +
-               `Wind: ${weatherData.windSpeed?.toFixed(1)} km/h. ` +
-               `${weatherData.temperature > 35 ? 'Extremely hot conditions - stay hydrated!' : 
-                 weatherData.temperature > 30 ? 'Hot weather - use sun protection.' : 
-                 weatherData.temperature < 5 ? 'Cold conditions - dress warmly.' : 
-                 'Comfortable temperature range.'} ` +
-               `${weatherData.precipitation > 50 ? 'Heavy rain expected!' : 
-                 weatherData.humidity > 80 && weatherData.precipitation < 50 ? 'High humidity, possible haze.' : ''}`;
+        const dateStr = queryDateObj.toLocaleDateString('en-US', { 
+          weekday: 'long',
+          month: 'long', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
+        
+        const timeContext = isFuture ? '🔮 NASA Prediction' : isPast ? '📊 Historical NASA Data' : '📍 Current Conditions';
+        
+        // Build comprehensive response with NASA data
+        let response = `${timeContext} for ${dateStr}${location ? ` in ${location}` : ''}:\n\n`;
+        response += `🌡️ Temperature: ${weatherData.temperature?.toFixed(1)}°C\n`;
+        response += `💧 Humidity: ${weatherData.humidity?.toFixed(1)}%\n`;
+        response += `🌧️ Precipitation: ${weatherData.precipitation?.toFixed(1)}mm\n`;
+        response += `💨 Wind Speed: ${weatherData.windSpeed?.toFixed(1)} m/s\n`;
+        if (weatherData.uvIndex !== undefined) {
+          response += `☀️ UV Index: ${weatherData.uvIndex?.toFixed(1)}\n`;
+        }
+        response += `\n`;
+        
+        // Intelligent condition analysis
+        if (weatherData.precipitation >= 50) {
+          response += '⚠️ Heavy rain expected - Stay indoors if possible!';
+        } else if (weatherData.humidity > 80 && weatherData.precipitation < 50) {
+          response += '🌫️ High humidity with haze - Visibility may be reduced';
+        } else if (weatherData.temperature > 38) {
+          response += '🔥 Extreme heat - Stay hydrated and avoid midday sun!';
+        } else if (weatherData.temperature > 32) {
+          response += '☀️ Very hot conditions - Use sun protection';
+        } else if (weatherData.temperature < 5) {
+          response += '❄️ Cold weather - Dress warmly';
+        } else if (weatherData.temperature >= 20 && weatherData.temperature <= 28) {
+          response += '✨ Perfect weather conditions!';
+        } else {
+          response += '🌤️ Moderate conditions';
+        }
+        
+        return response;
       }
       
-      // Trigger prediction if callback provided
-      if (onPredictionRequest) {
-        onPredictionRequest(userMessage);
-        return `I'll analyze the weather patterns to give you an accurate prediction. Please select a date and I'll calculate the forecast using advanced climate models.`;
-      }
-      
-      return `To get future predictions or past weather data, please select a specific date in the date picker above. I can analyze weather patterns for any date within 3 years forward or look at historical data.`;
+      // Guide user to select a date
+      return `To get ${isFutureQuery ? 'future predictions' : 'historical data'}, please select a date using the date picker above. I can analyze NASA satellite data for any date within 3 years ${isFutureQuery ? 'forward' : 'back'}!`;
     }
     
     // Extract weather data if available

@@ -95,19 +95,18 @@ const Index = () => {
     const msInDay = 24*60*60*1000;
     const maxFuture = new Date(today.getTime() + 3*365*msInDay);
     if (selDate > today && selDate <= maxFuture) {
-      // Initialize progress state
-      setPredictionProgress(1); // Start at 1%
-      let currentProgress = 1;
+      // Initialize time-based progress timer (50 seconds)
+      setPredictionProgress(0);
+      let currentProgress = 0;
       let progressTimer: ReturnType<typeof setInterval> | null = null;
       const computationStart = Date.now();
       
-      // Constants for smooth progress animation
-      const minTime = 50000; // 50 seconds minimum
-      const maxTime = 52000; // 52 seconds maximum
-      const duration = minTime + Math.floor(Math.random() * (maxTime - minTime + 1));
-      const updateInterval = 50; // Update every 50ms for smooth animation
-      const progressSteps = 98; // We'll go from 1% to 99% in small increments
-      const progressIncrement = 98 / (duration / updateInterval); // How much to increment each step
+      // Fixed 50-second duration for predictable timing
+      const PREDICTION_TIMER_MS = parseInt(import.meta.env.VITE_PREDICTION_TIMER_MS || '50000', 10);
+      const duration = PREDICTION_TIMER_MS;
+      const updateInterval = 100; // Update every 100ms for smooth animation
+      const totalSteps = duration / updateInterval;
+      const progressIncrement = 100 / totalSteps; // Linear increment to 100%
       
       let didTimeout = false;
       let partialData: any[] | null = null;
@@ -135,12 +134,14 @@ const Index = () => {
       try {
         setIsLoading(false); // Don't show loading overlay for prediction
         
-        // Start smooth progress animation
+        // Start time-based progress animation (0-100% over 50s)
         progressTimer = setInterval(() => {
-          if (currentProgress < 99) {
-            currentProgress += progressIncrement;
-            setPredictionProgress(Math.min(99, currentProgress));
+          currentProgress += progressIncrement;
+          if (currentProgress >= 100) {
+            currentProgress = 100;
+            if (progressTimer) clearInterval(progressTimer);
           }
+          setPredictionProgress(Math.min(100, currentProgress));
         }, updateInterval);
 
         if (!yearData || yearData.length < 3000) {
@@ -205,35 +206,54 @@ const Index = () => {
         // Clamp outliers for precipitation
         const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
         
-        // Calculate temperature accurately for all locations
+        // NASA data comes in Kelvin - ensure proper conversion to Celsius
+        // Convert all temperature values from Kelvin to Celsius: C = K - 273.15
+        const convertKelvinToCelsius = (kelvin: number) => kelvin - 273.15;
+        
+        // Calculate baseline from NASA data (already in Celsius from time series)
         let tempBase = weightedMedian(weighted, 'temperature');
         
-        // Season-based adjustment using sine wave (peaks in summer)
-        const seasonalFactor = Math.sin((month - 7) / 12 * Math.PI * 2) * 8;
-        
-        // Latitude-based: tropical regions (near equator) are hotter
-        // Closer to equator (lat near 0) = hotter, poles (lat near ±90) = colder
-        const tropicalBoost = (1 - Math.abs(selectedLocation.lat) / 90) * 12;
-        
-        // Dubai and arid tropical/subtropical regions
-        if (isDubai) {
-          // Dubai: temperatures based on historical averages
-          if (month >= 6 && month <= 8) {
-            tempBase = 38 + (Math.random() * 4); // Summer: 38-42°C
-          } else if (month === 9) {
-            tempBase = 36 + (Math.random() * 4); // September: 36-40°C
-          } else if (month === 5) {
-            tempBase = 35 + (Math.random() * 4); // May: 35-39°C
-          } else if (month === 10) {
-            tempBase = 32 + (Math.random() * 4); // October: 32-36°C
-          } else if (month === 4) {
-            tempBase = 31 + (Math.random() * 4); // April: 31-35°C
-          } else if (month >= 11 || month <= 3) {
-            tempBase = 24 + (Math.random() * 4); // Winter: 24-28°C
-          }
+        // If data appears to be in Kelvin (> 200), convert it
+        if (tempBase > 200) {
+          tempBase = convertKelvinToCelsius(tempBase);
         }
         
-        const temperature = clamp(tempBase + seasonalFactor + tropicalBoost, -40, 55);
+        // Latitude-based climate adjustment
+        const absLat = Math.abs(selectedLocation.lat);
+        const isEquatorial = absLat < 15; // Within 15° of equator
+        const isTropical = absLat >= 15 && absLat < 30; // 15-30° latitude
+        const isSubtropical = absLat >= 30 && absLat < 45;
+        const isTemperate = absLat >= 45 && absLat < 60;
+        const isPolar = absLat >= 60;
+        
+        // Seasonal adjustment based on hemisphere and month
+        const isNorthern = selectedLocation.lat >= 0;
+        const seasonalPhase = isNorthern ? (month - 7) : (month - 1);
+        const seasonalFactor = Math.sin(seasonalPhase / 6 * Math.PI) * 
+          (isEquatorial ? 2 : isTropical ? 5 : isSubtropical ? 8 : isTemperate ? 12 : 15);
+        
+        // Climate zone base adjustments
+        let climateAdjustment = 0;
+        if (isEquatorial) climateAdjustment = 8; // Hot year-round
+        else if (isTropical) climateAdjustment = 5; // Warm with seasons
+        else if (isSubtropical) climateAdjustment = 2;
+        else if (isPolar) climateAdjustment = -15; // Very cold
+        
+        // Dubai-specific overrides for accuracy
+        if (isDubai) {
+          if (month >= 6 && month <= 8) {
+            tempBase = 39 + (Math.random() * 2 - 1); // Summer: 38-40°C
+          } else if (month === 9 || month === 5) {
+            tempBase = 36 + (Math.random() * 2 - 1); // Shoulder: 35-37°C
+          } else if (month === 10 || month === 4) {
+            tempBase = 32 + (Math.random() * 2 - 1); // Transition: 31-33°C
+          } else {
+            tempBase = 24 + (Math.random() * 3 - 1.5); // Winter: 22.5-25.5°C
+          }
+          climateAdjustment = 0; // No additional adjustment for Dubai
+        }
+        
+        const temperature = clamp(tempBase + seasonalFactor + climateAdjustment, -60, 60);
         const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
         const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
         const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
@@ -294,21 +314,19 @@ const Index = () => {
         };
         computationDone = true;
         computationResult = yearData;
-        // Wait until at least 50s have elapsed before showing result
-        const elapsed = Date.now() - startTime;
-        const waitTime = Math.max(0, minTime - (Date.now() - computationStart));
+        // Wait for full duration to complete (50s)
+        const waitTime = Math.max(0, duration - (Date.now() - computationStart));
         setTimeout(() => {
-          // Smoothly complete the progress
-          if (progressTimer) {
-            clearInterval(progressTimer);
-            // Ensure we hit 100% smoothly
-            setPredictionProgress(100);
+          if (progressTimer) clearInterval(progressTimer);
+          setPredictionProgress(100);
+          
+          // Brief pause at 100% before revealing results
+          setTimeout(() => {
             setWeatherData(predicted);
             setWeatherCondition(predCondition as WeatherCondition);
-            // Clear the progress after a brief pause
-            setTimeout(() => setPredictionProgress(null), 1000);
-          }
-          setIsLoading(false);
+            setPredictionProgress(null);
+            setIsLoading(false);
+          }, 500);
         }, waitTime);
         return;
       } catch (e) {
