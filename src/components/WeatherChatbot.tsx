@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import citiesData from '@/data/cities.json';
 import countriesData from '@/data/countries.json';
+import { WeatherConversationMemory } from '@/lib/weather-memory';
+import { parseWeatherQuery } from '@/lib/weather-nlp';
+import { generateEnhancedResponse, analyzeWeatherTrends } from '@/lib/weather-response';
 import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +28,7 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: `Hello! I'm your weather assistant. I can help you understand current conditions${location ? ` for ${location}` : ''} and answer weather-related questions. What would you like to know?`,
+      text: `Hello! I'm your weather assistant. I can help you understand current conditions${location ? ` for ${location}` : ''}, predict weather patterns, analyze trends, and provide detailed insights. What would you like to know?`,
       isBot: true,
       timestamp: new Date(),
     },
@@ -33,6 +36,12 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const memoryRef = useRef(new WeatherConversationMemory());
+  const [contextualSuggestions, setContextualSuggestions] = useState<{
+    locations: string[];
+    conditions: string[];
+    metrics: string[];
+  }>({ locations: [], conditions: [], metrics: [] });
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -48,6 +57,63 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   }, [messages]);
 
   const generateWeatherResponse = async (userMessage: string): Promise<string> => {
+    // Parse the user's query using our NLP system
+    const nlpResult = parseWeatherQuery(userMessage, {
+      previousQueries: messages.filter(m => !m.isBot).map(m => m.text),
+      currentLocation: location,
+      currentTimeframe: selectedDate ? { start: new Date(selectedDate), end: new Date(selectedDate) } : undefined
+    });
+
+    // If we need clarification, ask the user
+    if (nlpResult.context?.requiresClarity) {
+      return nlpResult.context.suggestedFollowUp;
+    }
+
+    // Get relevant context from conversation memory
+    const memoryContext = memoryRef.current.getRelevantContext(userMessage, location);
+
+    // Update suggestions for the UI
+    setContextualSuggestions({
+      locations: memoryContext.suggestedLocations,
+      conditions: memoryContext.relevantConditions,
+      metrics: memoryContext.commonMetrics
+    });
+
+    // Process the weather data based on the detected intent
+    const insights = analyzeWeatherTrends(
+      weatherData?.historical || [],
+      weatherData?.current || {},
+      location || nlpResult.entities.locations[0] || 'current location'
+    );
+
+    // Generate an enhanced response using our template system
+    const response = generateEnhancedResponse(
+      nlpResult.intent,
+      {
+        location: location || nlpResult.entities.locations[0],
+        temperature: weatherData?.current?.temperature,
+        conditions: weatherData?.current?.conditions,
+        forecast: weatherData?.forecast,
+        historical: weatherData?.historical,
+        date: selectedDate,
+      },
+      insights,
+      {
+        recentLocations: memoryContext.suggestedLocations,
+        commonConditions: memoryContext.relevantConditions,
+        relatedMetrics: memoryContext.commonMetrics
+      }
+    );
+
+    // Update the conversation memory with new context
+    memoryRef.current.updateContext(
+      nlpResult.intent,
+      nlpResult.entities.locations,
+      nlpResult.entities.conditions,
+      nlpResult.entities.metrics
+    );
+
+    return response;
     const message = userMessage.toLowerCase();
     // Enhanced future/past prediction detection
     const isFutureQuery = message.includes('tomorrow') || message.includes('next') || 
@@ -137,18 +203,15 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
       today.setHours(0, 0, 0, 0);
       if (queryDate) {
         try {
-          // Use the same time-series prediction logic as WeatherControls
           const { fetchTimeSeriesData } = await import('@/services/nasaEarthdataService');
           const selDate = new Date(queryDate);
           selDate.setHours(0,0,0,0);
-          // Fetch 10 years of data for robust prediction
           const tenYearsAgo = new Date(selDate);
           tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
           const dataStart = tenYearsAgo.toISOString().split('T')[0];
           const dataEnd = selDate.toISOString().split('T')[0];
           const yearData = await fetchTimeSeriesData({ lat, lon, startDate: dataStart, endDate: dataEnd });
           console.debug('[DEBUG][Chatbot] Raw NASA time-series:', yearData.slice(0,5));
-          // Weighted prediction logic (copied from WeatherControls)
           const targetDay = selDate.getMonth() * 31 + selDate.getDate();
           const windowDays = 14;
           const candidates = yearData.filter(d => {
@@ -179,7 +242,6 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
             const total = arr.reduce((sum, d) => sum + d._w, 0);
             return arr.reduce((sum, d) => sum + d[key] * d._w, 0) / (total || 1);
           }
-          // Clamp helpers
           const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
           let tempBase = weightedMedian(weighted, 'temperature');
           if (tempBase > 200) tempBase = tempBase - 273.15;
@@ -199,7 +261,6 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
           else if (isTropical) climateAdjustment = 5;
           else if (isSubtropical) climateAdjustment = 2;
           else if (isPolar) climateAdjustment = -15;
-          // Dubai-specific
           const isDubai = (locName && locName.toLowerCase().includes('dubai')) ||
             (lat > 24 && lat < 26 && lon > 54 && lon < 56);
           if (isDubai) {
@@ -213,7 +274,6 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
           const precipitation = clamp(weightedMedian(weighted, 'precipitation'), 0, 200);
           const humidity = clamp(weightedAvg(weighted, 'humidity'), 10, 100);
           const windSpeed = clamp(weightedAvg(weighted, 'windSpeed'), 0, 40);
-          // Compose response
           const queryDateObj = selDate;
           const isFuture = queryDateObj > today;
           const isPast = queryDateObj < today;
@@ -225,25 +285,29 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
           });
           const timeContext = isFuture ? '🔮 Future Prediction' : isPast ? '📊 Historical Data' : '📍 Current Conditions';
           let response = `${timeContext} for ${dateStr}${locName ? ` in ${locName}` : ''}:\n\n`;
-          response += `🌡️ Temperature: ${temperature?.toFixed(1)}°C\n`;
-          response += `💧 Humidity: ${humidity?.toFixed(1)}%\n`;
-          response += `🌧️ Precipitation: ${precipitation?.toFixed(1)}mm\n`;
-          response += `💨 Wind Speed: ${windSpeed?.toFixed(1)} m/s\n`;
-          response += `\n`;
-          if (precipitation >= 50) {
-            response += '⚠️ Heavy rain expected - Stay indoors if possible!';
-          } else if (humidity > 80 && precipitation < 50) {
-            response += '🌫️ High humidity with haze - Visibility may be reduced';
-          } else if (temperature > 38) {
-            response += '🔥 Extreme heat - Stay hydrated and avoid midday sun!';
-          } else if (temperature > 32) {
-            response += '☀️ Very hot conditions - Use sun protection';
-          } else if (temperature < 5) {
-            response += '❄️ Cold weather - Dress warmly';
-          } else if (temperature >= 20 && temperature <= 28) {
-            response += '✨ Perfect weather conditions!';
+          if (!isNaN(temperature) && !isNaN(humidity) && !isNaN(precipitation) && !isNaN(windSpeed)) {
+            response += `🌡️ Temperature: ${temperature?.toFixed(1)}°C\n`;
+            response += `💧 Humidity: ${humidity?.toFixed(1)}%\n`;
+            response += `🌧️ Precipitation: ${precipitation?.toFixed(1)}mm\n`;
+            response += `💨 Wind Speed: ${windSpeed?.toFixed(1)} m/s\n`;
+            response += `\n`;
+            if (precipitation >= 50) {
+              response += '⚠️ Heavy rain expected - Stay indoors if possible!';
+            } else if (humidity > 80 && precipitation < 50) {
+              response += '🌫️ High humidity with haze - Visibility may be reduced';
+            } else if (temperature > 38) {
+              response += '🔥 Extreme heat - Stay hydrated and avoid midday sun!';
+            } else if (temperature > 32) {
+              response += '☀️ Very hot conditions - Use sun protection';
+            } else if (temperature < 5) {
+              response += '❄️ Cold weather - Dress warmly';
+            } else if (temperature >= 20 && temperature <= 28) {
+              response += '✨ Perfect weather conditions!';
+            } else {
+              response += '🌤️ Moderate conditions';
+            }
           } else {
-            response += '🌤️ Moderate conditions';
+            response += 'No reliable weather data found for this date/location. Please try another date or location.';
           }
           return response;
         } catch (error) {
@@ -251,7 +315,8 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
           return `I encountered an error fetching weather data. Please try again or select a date using the date picker.`;
         }
       }
-      return `To get ${isFutureQuery ? 'future predictions' : 'historical data'}, please select a date using the date picker above or mention a specific date (e.g., "2025-10-02") in your message!`;
+      // Always return a context label even if no date
+      return `❓ Unable to determine ${isFutureQuery ? 'future prediction' : 'historical data'} for your request. Please specify a valid date and location (e.g., "weather in Paris on 2026-05-10").`;
     }
     
     // Extract weather data if available
