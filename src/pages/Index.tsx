@@ -348,11 +348,17 @@ const Index = () => {
     setIsLoading(true);
     try {
       // Only use NASA data for the selected date (future or past)
+      console.log(`[DEBUG] Fetching weather data for ${selectedLocation.name} at lat:${selectedLocation.lat}, lon:${selectedLocation.lon}, date:${selectedDate}`);
+      
       const nasaData = await fetchNASAWeatherData(
         selectedLocation.lat,
         selectedLocation.lon,
         selectedDate
       );
+
+      console.log(`[DEBUG] Raw NASA data received:`, nasaData);
+      console.log(`[DEBUG] Temperature: ${nasaData.temperature}°C (should be in Celsius, not Kelvin)`);
+      console.log(`[DEBUG] Humidity: ${nasaData.humidity}%, Precipitation: ${nasaData.precipitation}mm`);
 
       const data: WeatherData = {
         timestamp: selectedDate,
@@ -366,6 +372,7 @@ const Index = () => {
         timeSeries: []
       };
 
+      console.log(`[DEBUG] Final weather data:`, data);
       setWeatherData(data);
 
       // Set weather condition from NASA data with improved logic
@@ -374,8 +381,10 @@ const Index = () => {
       let condition: WeatherCondition = 'sunny';
       if (nasaData.humidity > 80 && nasaData.precipitation < 50) {
         condition = 'cloudy'; // haze represented as cloudy
+        console.log(`[DEBUG] Condition set to 'cloudy' (haze) - Humidity: ${nasaData.humidity}%, Precipitation: ${nasaData.precipitation}mm`);
       } else if (nasaData.precipitation >= 50) {
         condition = 'rainy';
+        console.log(`[DEBUG] Condition set to 'rainy' - Precipitation: ${nasaData.precipitation}mm`);
       } else {
         const conditionMap: { [key: string]: WeatherCondition } = {
           'very sunny': 'sunny',
@@ -387,6 +396,7 @@ const Index = () => {
           'stormy': 'stormy'
         };
         condition = conditionMap[nasaData.condition] || 'sunny';
+        console.log(`[DEBUG] Condition set from NASA data: ${nasaData.condition} -> ${condition}`);
       }
       setWeatherCondition(condition);
 

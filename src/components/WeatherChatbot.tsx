@@ -45,7 +45,7 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
     scrollToBottom();
   }, [messages]);
 
-  const generateWeatherResponse = (userMessage: string): string => {
+  const generateWeatherResponse = async (userMessage: string): Promise<string> => {
     const message = userMessage.toLowerCase();
     
     // Enhanced future/past prediction detection
@@ -60,13 +60,87 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
                         message.includes('historical') || message.includes('previous') ||
                         message.includes('ago');
     
+    // Extract date from message if present
+    const dateMatch = message.match(/\d{4}-\d{2}-\d{2}/) || 
+                     message.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    
     // Always respond intelligently to prediction queries with NASA data
     if (isFutureQuery || isPastQuery) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      if (selectedDate && weatherData) {
-        const queryDateObj = new Date(selectedDate);
+      // Use selectedDate if available, otherwise try to extract from message
+      let queryDate = selectedDate;
+      if (!queryDate && dateMatch) {
+        queryDate = dateMatch[0];
+      }
+      
+      if (queryDate) {
+        try {
+          // Fetch fresh data for the requested date
+          const queryDateObj = new Date(queryDate);
+          queryDateObj.setHours(0, 0, 0, 0);
+          const isFuture = queryDateObj > today;
+          const isPast = queryDateObj < today;
+          
+          const dateStr = queryDateObj.toLocaleDateString('en-US', { 
+            weekday: 'long',
+            month: 'long', 
+            day: 'numeric', 
+            year: 'numeric' 
+          });
+          
+          const timeContext = isFuture ? '🔮 Future Prediction' : isPast ? '📊 Historical Data' : '📍 Current Conditions';
+          
+          // Fetch weather data for this specific date
+          const { fetchNASAWeatherData } = await import('@/services/nasaWeatherService');
+          
+          // Extract coordinates from location or use defaults (Dubai)
+          const lat = 25.2048; // Default to Dubai for testing
+          const lon = 55.2708;
+          
+          console.log(`[DEBUG] Fetching weather for ${dateStr} at lat:${lat}, lon:${lon}`);
+          
+          const fetchedData = await fetchNASAWeatherData(lat, lon, queryDate);
+          
+          console.log(`[DEBUG] Raw fetched data:`, fetchedData);
+          
+          // Build comprehensive response
+          let response = `${timeContext} for ${dateStr}${location ? ` in ${location}` : ''}:\n\n`;
+          response += `🌡️ Temperature: ${fetchedData.temperature?.toFixed(1)}°C\n`;
+          response += `💧 Humidity: ${fetchedData.humidity?.toFixed(1)}%\n`;
+          response += `🌧️ Precipitation: ${fetchedData.precipitation?.toFixed(1)}mm\n`;
+          response += `💨 Wind Speed: ${fetchedData.windSpeed?.toFixed(1)} m/s\n`;
+          if (fetchedData.uvIndex !== undefined) {
+            response += `☀️ UV Index: ${fetchedData.uvIndex?.toFixed(1)}\n`;
+          }
+          response += `\n`;
+          
+          // Intelligent condition analysis
+          if (fetchedData.precipitation >= 50) {
+            response += '⚠️ Heavy rain expected - Stay indoors if possible!';
+          } else if (fetchedData.humidity > 80 && fetchedData.precipitation < 50) {
+            response += '🌫️ High humidity with haze - Visibility may be reduced';
+          } else if (fetchedData.temperature > 38) {
+            response += '🔥 Extreme heat - Stay hydrated and avoid midday sun!';
+          } else if (fetchedData.temperature > 32) {
+            response += '☀️ Very hot conditions - Use sun protection';
+          } else if (fetchedData.temperature < 5) {
+            response += '❄️ Cold weather - Dress warmly';
+          } else if (fetchedData.temperature >= 20 && fetchedData.temperature <= 28) {
+            response += '✨ Perfect weather conditions!';
+          } else {
+            response += '🌤️ Moderate conditions';
+          }
+          
+          return response;
+        } catch (error) {
+          console.error('[DEBUG] Error fetching weather data:', error);
+          return `I encountered an error fetching weather data. Please try again or select a date using the date picker.`;
+        }
+      } else if (weatherData) {
+        // Fallback to currently loaded data if no specific date
+        const queryDateObj = selectedDate ? new Date(selectedDate) : new Date();
         queryDateObj.setHours(0, 0, 0, 0);
         const isFuture = queryDateObj > today;
         const isPast = queryDateObj < today;
@@ -78,9 +152,8 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
           year: 'numeric' 
         });
         
-        const timeContext = isFuture ? '🔮 NASA Prediction' : isPast ? '📊 Historical NASA Data' : '📍 Current Conditions';
+        const timeContext = isFuture ? '🔮 Future Prediction' : isPast ? '📊 Historical Data' : '📍 Current Conditions';
         
-        // Build comprehensive response with NASA data
         let response = `${timeContext} for ${dateStr}${location ? ` in ${location}` : ''}:\n\n`;
         response += `🌡️ Temperature: ${weatherData.temperature?.toFixed(1)}°C\n`;
         response += `💧 Humidity: ${weatherData.humidity?.toFixed(1)}%\n`;
@@ -91,7 +164,6 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
         }
         response += `\n`;
         
-        // Intelligent condition analysis
         if (weatherData.precipitation >= 50) {
           response += '⚠️ Heavy rain expected - Stay indoors if possible!';
         } else if (weatherData.humidity > 80 && weatherData.precipitation < 50) {
@@ -112,7 +184,7 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
       }
       
       // Guide user to select a date
-      return `To get ${isFutureQuery ? 'future predictions' : 'historical data'}, please select a date using the date picker above. I can analyze NASA satellite data for any date within 3 years ${isFutureQuery ? 'forward' : 'back'}!`;
+      return `To get ${isFutureQuery ? 'future predictions' : 'historical data'}, please select a date using the date picker above or mention a specific date (e.g., "2025-10-02") in your message!`;
     }
     
     // Extract weather data if available
@@ -188,21 +260,34 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const userInput = input;
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    try {
+      // Generate response (now async to fetch data)
+      const responseText = await generateWeatherResponse(userInput);
+      
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: generateWeatherResponse(input),
+        text: responseText,
         isBot: true,
         timestamp: new Date(),
       };
       
       setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      console.error('Error generating response:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'I encountered an error processing your request. Please try again.',
+        isBot: true,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsLoading(false);
-    }, 1000 + Math.random() * 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

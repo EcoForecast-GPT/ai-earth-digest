@@ -25,7 +25,7 @@ export const fetchNASAWeatherData = async (
   date?: string
 ): Promise<NASAWeatherData> => {
   try {
-    console.log(`Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
+    console.log(`[DEBUG nasaWeatherService] Fetching weather for lat: ${lat}, lon: ${lon}, date: ${date}`);
     
     const response = await fetch(WEATHER_FUNCTION_URL, {
       method: 'POST',
@@ -38,12 +38,23 @@ export const fetchNASAWeatherData = async (
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[DEBUG nasaWeatherService] Weather API error: ${response.status}`, errorText);
       throw new Error(`Weather API error: ${response.status}`);
     }
 
     const data = await response.json();
     
-    console.log('Weather data received:', data);
+    console.log('[DEBUG nasaWeatherService] Raw weather data received:', data);
+    console.log(`[DEBUG nasaWeatherService] Temperature from API: ${data.temperature}°C (should already be in Celsius)`);
+    console.log(`[DEBUG nasaWeatherService] Humidity: ${data.humidity}%, Precipitation: ${data.precipitation}mm`);
+    console.log(`[DEBUG nasaWeatherService] Condition: ${data.condition}`);
+    
+    // Verify temperature is in Celsius (reasonable range check)
+    if (data.temperature > 200) {
+      console.warn(`[DEBUG nasaWeatherService] WARNING: Temperature ${data.temperature} appears to be in Kelvin! Converting to Celsius.`);
+      data.temperature = data.temperature - 273.15;
+    }
     
     return {
       temperature: data.temperature,
@@ -56,7 +67,7 @@ export const fetchNASAWeatherData = async (
       condition: data.condition
     };
   } catch (error) {
-    console.error('Error fetching NASA weather data:', error);
+    console.error('[DEBUG nasaWeatherService] Error fetching weather data:', error);
     throw error instanceof Error ? error : new Error('Unknown weather fetch error');
   }
 };
