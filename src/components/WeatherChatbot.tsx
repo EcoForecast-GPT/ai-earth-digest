@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import citiesData from '@/data/cities.json';
+import countriesData from '@/data/countries.json';
 import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,29 +59,82 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
       message.includes('past') || message.includes('was') ||
       message.includes('historical') || message.includes('previous') ||
       message.includes('ago') || message.includes('trend');
-    // Extract date from message if present
-    const dateMatch = message.match(/\d{4}-\d{2}-\d{2}/) || 
-      message.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-    if (isFutureQuery || isPastQuery) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      let queryDate = selectedDate;
-      if (!queryDate && dateMatch) {
-        queryDate = dateMatch[0];
+    // Robust date extraction: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY, etc.
+    let queryDate = selectedDate;
+    let dateMatch = message.match(/\d{4}-\d{2}-\d{2}/);
+    if (!dateMatch) dateMatch = message.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if (!queryDate && dateMatch) {
+      // Normalize to YYYY-MM-DD
+      if (dateMatch[0].includes('-')) {
+        const parts = dateMatch[0].split('-');
+        if (parts[0].length === 4) {
+          queryDate = dateMatch[0]; // Already YYYY-MM-DD
+        } else {
+          // DD-MM-YYYY or MM-DD-YYYY
+          const [a, b, c] = parts;
+          queryDate = `${c.length === 4 ? c : '20'+c.padStart(2,'0')}-${a.padStart(2,'0')}-${b.padStart(2,'0')}`;
+        }
+      } else if (dateMatch[0].includes('/')) {
+        const parts = dateMatch[0].split('/');
+        // Assume MM/DD/YYYY or DD/MM/YYYY, prefer MM/DD/YYYY for US, else DD/MM/YYYY
+        const [a, b, c] = parts;
+        if (c.length === 4) {
+          // Try MM/DD/YYYY
+          if (parseInt(a) > 12) {
+            queryDate = `${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`;
+          } else {
+            queryDate = `${c}-${a.padStart(2,'0')}-${b.padStart(2,'0')}`;
+          }
+        } else {
+          queryDate = `${'20'+c.padStart(2,'0')}-${a.padStart(2,'0')}-${b.padStart(2,'0')}`;
+        }
       }
-      // Use location props or fallback to Dubai
-      let lat = 25.2048, lon = 55.2708, locName = location || 'Dubai, UAE';
-      if (typeof location === 'string' && location.includes(',')) {
-        // Try to parse "lat,lon" string
+    }
+    // Robust world location extraction
+    let lat = 25.2048, lon = 55.2708, locName = location || '';
+    // 1. Try to extract lat/lon from message
+    const latLonMatch = message.match(/(-?\d{1,2}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/);
+    if (latLonMatch) {
+      const plat = parseFloat(latLonMatch[1]);
+      const plon = parseFloat(latLonMatch[2]);
+      if (!isNaN(plat) && !isNaN(plon)) {
+        lat = plat; lon = plon; locName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      }
+    } else {
+      // 2. Try to match city name
+      let found = false;
+      for (const city of citiesData) {
+        if (message.includes(city.name.toLowerCase())) {
+          lat = city.lat; lon = city.lon; locName = `${city.name}, ${city.country}`; found = true; break;
+        }
+      }
+      // 3. Try to match country name
+      if (!found) {
+        for (const country of countriesData) {
+          if (message.includes(country.name.toLowerCase()) || message.includes(country.code.toLowerCase())) {
+            lat = country.lat; lon = country.lon; locName = country.name; found = true; break;
+          }
+        }
+      }
+      // 4. If not found, fallback to location prop (could be lat,lon string)
+      if (!found && typeof location === 'string' && location.includes(',')) {
         const parts = location.split(',').map(s => s.trim());
         if (parts.length === 2) {
           const plat = parseFloat(parts[0]);
           const plon = parseFloat(parts[1]);
           if (!isNaN(plat) && !isNaN(plon)) {
-            lat = plat; lon = plon;
+            lat = plat; lon = plon; locName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
           }
         }
       }
+      // 5. If still not found, fallback to Dubai
+      if (!found && !locName) {
+        lat = 25.276987; lon = 55.296249; locName = 'Dubai, UAE';
+      }
+    }
+    if (isFutureQuery || isPastQuery) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       if (queryDate) {
         try {
           // Use the same time-series prediction logic as WeatherControls
