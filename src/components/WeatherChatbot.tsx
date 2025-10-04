@@ -4,6 +4,8 @@ import countriesData from '@/data/countries.json';
 import { WeatherConversationMemory } from '@/lib/weather-memory';
 import { parseWeatherQuery } from '@/lib/weather-nlp';
 import { generateEnhancedResponse, analyzeWeatherTrends } from '@/lib/weather-response';
+import { answerCommonQuestion, generateNaturalResponse } from '@/lib/weather-advice';
+import { parseNaturalDate } from '@/lib/date-parser';
 import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,11 +59,16 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   }, [messages]);
 
   const generateWeatherResponse = async (userMessage: string): Promise<string> => {
+    // First, try to parse any dates in the query
+    const parsedDate = parseNaturalDate(userMessage);
+    
     // Parse the user's query using our NLP system
     const nlpResult = parseWeatherQuery(userMessage, {
       previousQueries: messages.filter(m => !m.isBot).map(m => m.text),
       currentLocation: location,
-      currentTimeframe: selectedDate ? { start: new Date(selectedDate), end: new Date(selectedDate) } : undefined
+      currentTimeframe: parsedDate ? { start: parsedDate.date, end: parsedDate.date } 
+                     : selectedDate ? { start: new Date(selectedDate), end: new Date(selectedDate) }
+                     : undefined
     });
 
     // If we need clarification, ask the user
@@ -79,6 +86,19 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
       metrics: memoryContext.commonMetrics
     });
 
+    // If this is a forecast request, make sure we pass the correct date to the weather API
+    const targetDate = nlpResult.intent.timeframe?.start || new Date();
+    
+    // If we need to fetch forecast data, do it here
+    if ((nlpResult.intent.type === 'forecast' || parsedDate) && onPredictionRequest) {
+      const dateStr = targetDate.toISOString().split('T')[0];
+      console.log(`[DEBUG WeatherChatbot] Requesting forecast for date: ${dateStr}`);
+      onPredictionRequest(dateStr);
+      
+      // Wait a moment for the data to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     // Process the weather data based on the detected intent
     const insights = analyzeWeatherTrends(
       weatherData?.historical || [],
@@ -86,24 +106,64 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
       location || nlpResult.entities.locations[0] || 'current location'
     );
 
-    // Generate an enhanced response using our template system
-    const response = generateEnhancedResponse(
-      nlpResult.intent,
-      {
-        location: location || nlpResult.entities.locations[0],
-        temperature: weatherData?.current?.temperature,
-        conditions: weatherData?.current?.conditions,
-        forecast: weatherData?.forecast,
-        historical: weatherData?.historical,
-        date: selectedDate,
-      },
-      insights,
-      {
-        recentLocations: memoryContext.suggestedLocations,
-        commonConditions: memoryContext.relevantConditions,
-        relatedMetrics: memoryContext.commonMetrics
-      }
-    );
+    // Determine if this is a common question type
+    let response = '';
+    const questionTypes = {
+      clothing: userMessage.match(/wear|clothing|dress|umbrella|jacket|coat|sunscreen/i),
+      activities: userMessage.match(/can I (go|do)|plan|activity|possible|safe to/i),
+      comfort: userMessage.match(/comfortable|nice|feel like|hot|cold|warm|cool|pleasant/i),
+      risk: userMessage.match(/risk|warning|danger|chance|will it rain|storm/i),
+      comparison: userMessage.match(/compared|warmer|colder|better|worse than|difference|like yesterday/i)
+    };
+
+    const questionType = Object.entries(questionTypes).find(([_, match]) => match)?.[0] as
+      'clothing' | 'activities' | 'comfort' | 'risk' | 'comparison' | undefined;
+
+    if (questionType) {
+      // Handle common question with natural advice
+      response = answerCommonQuestion(
+        questionType,
+        weatherData?.current || weatherData?.forecast,
+        {
+          timeOfDay: nlpResult.intent.timeframe?.period === 'day' ? 'today' : undefined,
+          date: nlpResult.intent.timeframe?.start,
+          previousWeather: weatherData?.historical?.[0]
+        }
+      );
+    } else {
+      // Generate an enhanced response using our template system
+      response = generateEnhancedResponse(
+        nlpResult.intent,
+        {
+          location: location || nlpResult.entities.locations[0],
+          temperature: weatherData?.current?.temperature,
+          conditions: weatherData?.current?.conditions,
+          forecast: weatherData?.forecast,
+          historical: weatherData?.historical,
+          date: selectedDate,
+        },
+        insights,
+        {
+          recentLocations: memoryContext.suggestedLocations,
+          commonConditions: memoryContext.relevantConditions,
+          relatedMetrics: memoryContext.commonMetrics
+        }
+      );
+    }
+
+    // Add natural language response for context
+    if (weatherData?.current || weatherData?.forecast) {
+      response += '\n\n' + generateNaturalResponse(
+        weatherData?.current || weatherData?.forecast,
+        userMessage,
+        {
+          timeOfDay: nlpResult.intent.timeframe?.period === 'day' ? 'today' : undefined,
+          date: nlpResult.intent.timeframe?.start,
+          location: location || nlpResult.entities.locations[0],
+          previousWeather: weatherData?.historical?.[0]
+        }
+      );
+    }
 
     // Update the conversation memory with new context
     memoryRef.current.updateContext(

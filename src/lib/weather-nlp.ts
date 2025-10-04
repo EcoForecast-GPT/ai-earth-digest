@@ -35,12 +35,55 @@ interface NLPResult {
 }
 
 // Sophisticated patterns for weather-specific language
+const commonQuestions = {
+  clothing: [
+    /what (should|can) I wear/i,
+    /do I need (a|an|to bring|to wear)/i,
+    /(should|can) I wear/i,
+    /dress code/i,
+    /clothing advice/i,
+    /bring (umbrella|jacket|coat|sunscreen)/i
+  ],
+  activities: [
+    /can I (go|do)/i,
+    /(good|nice|okay) (for|to) (go|do)/i,
+    /(should|can) we (plan|have|do)/i,
+    /planning (a|an|to|for)/i,
+    /(possible|safe) to/i
+  ],
+  comfort: [
+    /will (it|the weather) be (nice|good|okay|comfortable)/i,
+    /how (hot|cold|warm|cool|wet|dry|humid) will it be/i,
+    /will I (need|be|feel)/i,
+    /(feel|feels) like/i
+  ],
+  risk: [
+    /risk of (rain|storm|snow|heat|cold)/i,
+    /chance of (rain|storm|snow|precipitation)/i,
+    /will it (rain|snow|storm)/i,
+    /weather warning/i,
+    /(dangerous|safe|risky)/i
+  ],
+  comparison: [
+    /(warmer|colder|better|worse) than/i,
+    /compared to/i,
+    /difference between/i,
+    /same as/i,
+    /like (yesterday|last|previous)/i
+  ]
+};
+
 const weatherPatterns = {
   timeExpressions: [
     /(?:next|last|this)\s+(?:week|month|year|season)/i,
     /(?:in|during|for)\s+(?:summer|winter|spring|fall|autumn)/i,
     /(?:from|between)\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?)\s+(?:to|and|until)\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?)/i,
-    /(?:early|mid|late)\s+([A-Za-z]+)/i
+    /(?:early|mid|late)\s+([A-Za-z]+)/i,
+    /(?:tomorrow|today|yesterday)/i,
+    /(?:in|after)\s+(\d+)\s+(?:day|days)/i,
+    /next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+    /(?:morning|afternoon|evening|night)/i,
+    /(?:this|later|earlier)\s+(?:morning|afternoon|evening|night)/i
   ],
   
   locationPatterns: [
@@ -155,11 +198,97 @@ export function parseWeatherQuery(
 }
 
 function processTimeframe(expression: string, currentDate: Date): WeatherIntent['timeframe'] {
-  // Implementation of sophisticated date processing
-  // This is a placeholder - actual implementation would be more complex
+  const lowerExpression = expression.toLowerCase();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (lowerExpression === 'tomorrow') {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return {
+      start: tomorrow,
+      end: tomorrow,
+      period: 'day'
+    };
+  }
+
+  if (lowerExpression === 'today') {
+    return {
+      start: today,
+      end: today,
+      period: 'day'
+    };
+  }
+
+  if (lowerExpression === 'yesterday') {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return {
+      start: yesterday,
+      end: yesterday,
+      period: 'day'
+    };
+  }
+
+  // Handle "in X days"
+  const daysMatch = lowerExpression.match(/(?:in|after)\s+(\d+)\s+(?:day|days)/);
+  if (daysMatch) {
+    const daysToAdd = parseInt(daysMatch[1]);
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + daysToAdd);
+    return {
+      start: futureDate,
+      end: futureDate,
+      period: 'day'
+    };
+  }
+
+  // Handle next weekday
+  const weekdayMatch = lowerExpression.match(/next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/);
+  if (weekdayMatch) {
+    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const targetDay = weekdays.indexOf(weekdayMatch[1]);
+    const nextDate = new Date(today);
+    nextDate.setDate(today.getDate() + (7 + targetDay - today.getDay()) % 7);
+    return {
+      start: nextDate,
+      end: nextDate,
+      period: 'day'
+    };
+  }
+
+  // Handle relative time periods
+  if (lowerExpression.match(/next\s+(?:week|month|year|season)/)) {
+    const period = lowerExpression.split(' ')[1] as 'week' | 'month' | 'year' | 'season';
+    const start = new Date(today);
+    const end = new Date(today);
+    
+    switch (period) {
+      case 'week':
+        start.setDate(today.getDate() + 7);
+        end.setDate(today.getDate() + 13);
+        break;
+      case 'month':
+        start.setMonth(today.getMonth() + 1);
+        end.setMonth(today.getMonth() + 2, 0);
+        break;
+      case 'year':
+        start.setFullYear(today.getFullYear() + 1);
+        end.setFullYear(today.getFullYear() + 2, 0);
+        break;
+      case 'season':
+        start.setMonth(Math.floor((today.getMonth() + 3) / 3) * 3 + 3);
+        end.setMonth(Math.floor((today.getMonth() + 3) / 3) * 3 + 5, 30);
+        break;
+    }
+    
+    return { start, end, period };
+  }
+
+  // Default to today if no pattern matches
   return {
-    start: new Date(),
-    end: new Date(),
+    start: today,
+    end: today,
     period: 'day'
   };
 }
