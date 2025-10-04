@@ -1,10 +1,12 @@
-interface DateParseResult {
+export interface DateParseResult {
   date: Date;
   confidence: number;
   matches: string[];
 }
 
 export function parseNaturalDate(text: string): DateParseResult | null {
+  if (!text) return null;
+  
   const normalized = text.toLowerCase().trim();
   
   // Initialize result
@@ -68,7 +70,7 @@ export function parseNaturalDate(text: string): DateParseResult | null {
     },
     // Month DD, YYYY or DD Month YYYY
     {
-      regex: new RegExp(\`\\b(${Object.keys(months).join('|')}|\\d{1,2})\\s*[,\\s]\\s*(\\d{1,2}|${Object.keys(months).join('|')})\\s*[,\\s]\\s*(\\d{4})\\b\`, 'i'),
+      regex: new RegExp(`\\b(${Object.keys(months).join('|')}|\\d{1,2})\\s*[,\\s]\\s*(\\d{1,2}|${Object.keys(months).join('|')})\\s*[,\\s]\\s*(\\d{4})\\b`, 'i'),
       confidence: 0.95,
       parse: (matches: string[]) => {
         let [_, part1, part2, year] = matches;
@@ -142,28 +144,35 @@ export function parseNaturalDate(text: string): DateParseResult | null {
     }
   ];
 
-  // Try each pattern
+  // Try each pattern and find the highest confidence match
+  let bestMatch: DateParseResult | null = null;
+  
   for (const pattern of patterns) {
     const matches = normalized.match(pattern.regex);
     if (matches) {
       const parsedDate = pattern.parse(matches);
       if (isValidDate(parsedDate)) {
-        result.date = parsedDate;
-        result.confidence = pattern.confidence;
-        result.matches = matches;
-        return result;
+        const match: DateParseResult = {
+          date: parsedDate,
+          confidence: pattern.confidence,
+          matches: Array.from(matches)
+        };
+        
+        if (!bestMatch || match.confidence > bestMatch.confidence) {
+          bestMatch = match;
+        }
       }
     }
   }
-
-  return null;
+  
+  return bestMatch;
 }
 
 function isValidDate(date: Date): boolean {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
-export export function formatDate(date: Date): string {
+export function formatDate(date: Date): string {
   const options: Intl.DateTimeFormatOptions = {
     weekday: 'long',
     year: 'numeric',
@@ -172,6 +181,3 @@ export export function formatDate(date: Date): string {
   };
   return date.toLocaleDateString('en-US', options);
 }
-
-export { parseNaturalDate, formatDate };
-export type { DateParseResult };

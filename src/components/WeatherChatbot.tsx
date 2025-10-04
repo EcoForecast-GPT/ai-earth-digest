@@ -5,7 +5,7 @@ import { WeatherConversationMemory } from '@/lib/weather-memory';
 import { parseWeatherQuery } from '@/lib/weather-nlp';
 import { generateEnhancedResponse, analyzeWeatherTrends } from '@/lib/weather-response';
 import { answerCommonQuestion, generateNaturalResponse } from '@/lib/weather-advice';
-import { parseNaturalDate } from '@/lib/date-parser';
+import { parseNaturalDate, formatDate } from '@/lib/date-parser';
 import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,13 +59,25 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
   }, [messages]);
 
   const generateWeatherResponse = async (userMessage: string): Promise<string> => {
+    console.log('[DEBUG] Processing query:', userMessage);
+    
     // First, try to parse any dates in the query
     const parsedDate = parseNaturalDate(userMessage);
+    console.log('[DEBUG] Parsed date:', parsedDate);
     
+    // Parse location from the query
+    const locationMatch = userMessage.match(/\bin\s+([^.,?!]+)/i);
+    const queryLocation = locationMatch ? locationMatch[1].trim() : location;
+    console.log('[DEBUG] Detected location:', queryLocation);
+    
+    // Determine if this is a temperature query
+    const isTemperatureQuery = /temperature|how (?:hot|cold|warm)|(?:hot|cold|warm) will it be/i.test(userMessage);
+    console.log('[DEBUG] Is temperature query:', isTemperatureQuery);
+
     // Parse the user's query using our NLP system
     const nlpResult = parseWeatherQuery(userMessage, {
       previousQueries: messages.filter(m => !m.isBot).map(m => m.text),
-      currentLocation: location,
+      currentLocation: queryLocation,
       currentTimeframe: parsedDate ? { start: parsedDate.date, end: parsedDate.date } 
                      : selectedDate ? { start: new Date(selectedDate), end: new Date(selectedDate) }
                      : undefined
@@ -91,12 +103,38 @@ export const WeatherChatbot = ({ weatherData, location, selectedDate, onPredicti
     
     // If we need to fetch forecast data, do it here
     if ((nlpResult.intent.type === 'forecast' || parsedDate) && onPredictionRequest) {
-      const dateStr = targetDate.toISOString().split('T')[0];
-      console.log(`[DEBUG WeatherChatbot] Requesting forecast for date: ${dateStr}`);
+      const dateToUse = parsedDate ? parsedDate.date : targetDate;
+      const dateStr = dateToUse.toISOString().split('T')[0];
+      console.log(`[DEBUG] Requesting forecast for date: ${dateStr}`);
+      
+      // Request the forecast and wait for data
       onPredictionRequest(dateStr);
       
-      // Wait a moment for the data to update
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Give a small delay for the data to be processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // If this is a temperature query, focus on temperature
+      if (isTemperatureQuery) {
+        console.log('[DEBUG] Temperature data:', weatherData?.temperature);
+        if (weatherData?.temperature !== undefined) {
+          const temp = weatherData.temperature;
+          const tempDescription = temp > 35 ? 'very hot'
+                               : temp > 30 ? 'hot'
+                               : temp > 25 ? 'warm'
+                               : temp > 15 ? 'mild'
+                               : temp > 10 ? 'cool'
+                               : 'cold';
+          
+          return `The temperature in ${queryLocation} on ${formatDate(dateToUse)} will be ${temp.toFixed(1)}°C (${tempDescription}).${
+            temp > 35 ? ' 🌡️ It will be very hot, stay hydrated and avoid midday sun.' :
+            temp > 30 ? ' ☀️ Hot conditions expected, consider indoor activities during peak hours.' :
+            temp > 25 ? ' 😎 Pleasant warm weather, perfect for outdoor activities.' :
+            temp > 15 ? ' 🌤️ Comfortable temperature for most activities.' :
+            temp > 10 ? ' 🌥️ Bring a light jacket for comfort.' :
+            ' 🧥 Dress warmly, cold conditions expected.'
+          }`;
+        }
+      }
     }
 
     // Process the weather data based on the detected intent
